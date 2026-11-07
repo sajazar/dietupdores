@@ -92,6 +92,17 @@ trait DietUp_Zibal_Trait {
         } else {
             echo '<p>پرداخت شما تأیید شده است، اما صدور لایسنس هنوز تکمیل نشده. بعداً همین لینک را دوباره باز کنید یا با پشتیبانی تماس بگیرید.</p>';
         }
+        if ('complete' === $row->package_key) {
+            $resources = DietUp_Private_Files::resources();
+            echo '<h2>دریافت فایل‌های پکیج کامل</h2>';
+            foreach (array('video' => 'دریافت ویدئوی آفلاین دوره', 'booklet' => 'دریافت جزوه دوره') as $type => $label) {
+                if (!empty($resources[$type]['path']) && is_file($resources[$type]['path'])) {
+                    echo '<p><a href="' . esc_url(DietUp_Private_Files::download_url($type, $token)) . '">' . esc_html($label) . '</a></p>';
+                } else {
+                    echo '<p>' . esc_html($label) . ': فایل هنوز توسط مدیریت بارگذاری نشده است.</p>';
+                }
+            }
+        }
         echo '</body></html>';
         exit;
     }
