@@ -224,8 +224,8 @@ final class DietUp_Plugin {
             'gateway_name' => '',
             'gateway_merchant_id' => '',
             'gateway_api_key' => '',
-            'gateway_payment_url' => '',
-            'gateway_verify_url' => '',
+            'gateway_payment_url' => 'https://gateway.zibal.ir/v1/request',
+            'gateway_verify_url' => 'https://gateway.zibal.ir/v1/verify',
             'gateway_sandbox' => 1,
             'spotplayer_api_url' => '',
             'spotplayer_api_key' => '',
@@ -240,7 +240,7 @@ final class DietUp_Plugin {
         if (isset($_GET['settings_saved']) && '1' === $_GET['settings_saved']) {
             echo '<div class="notice notice-success is-dismissible"><p>تنظیمات ذخیره شد.</p></div>';
         }
-        echo '<div class="notice notice-warning"><p><strong>توجه:</strong> این صفحه فعلاً اطلاعات اتصال را به‌صورت امن در تنظیمات وردپرس نگهداری می‌کند. تا زمان پیاده‌سازی و آزمایش آداپتور رسمی درگاه و API مستند SpotPlayer، ذخیره این مقادیر به معنی فعال‌شدن پرداخت یا صدور لایسنس نیست.</p></div>';
+        echo '<div class="notice notice-warning"><p><strong>توجه:</strong> اتصال سمت سرور زیبال و درخواست صدور لایسنس SpotPlayer پیاده‌سازی شده است؛ بااین‌حال تا واردکردن شناسه پذیرنده، API Key و شناسه دوره و انجام تراکنش آزمایشی، اتصال عملیاتی سایت تأییدشده محسوب نمی‌شود. کلیدها را فقط در همین صفحه وارد کنید.</p></div>';
         echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">';
         echo '<input type="hidden" name="action" value="dietup_save_settings">';
         wp_nonce_field('dietup_save_settings', 'dietup_settings_nonce');
