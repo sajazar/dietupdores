@@ -65,6 +65,10 @@ final class DietUp_Private_Files {
         ), admin_url('admin-post.php'));
     }
 
+    public static function user_download_url($type, $registration_id) {
+        return add_query_arg(array('action' => 'dietup_download_resource', 'type' => $type, 'registration_id' => absint($registration_id)), admin_url('admin-post.php'));
+    }
+
     public static function render_admin_page() {
         if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
         $resources = self::resources();
@@ -184,14 +188,23 @@ final class DietUp_Private_Files {
 
     public static function handle_download() {
         $token = isset($_GET['dietup_access']) ? sanitize_text_field(wp_unslash($_GET['dietup_access'])) : '';
+        $registration_id = isset($_GET['registration_id']) ? absint($_GET['registration_id']) : 0;
         $type = isset($_GET['type']) ? sanitize_key(wp_unslash($_GET['type'])) : '';
-        if (!preg_match('/^[a-f0-9]{64}$/', $token) || !in_array($type, array('video', 'booklet'), true)) {
+        if (!in_array($type, array('video', 'booklet'), true) ||
+            (!$registration_id && !preg_match('/^[a-f0-9]{64}$/', $token))) {
             status_header(404); exit;
         }
         global $wpdb;
         $table = $wpdb->prefix . 'dietup_registrations';
-        $row = $wpdb->get_row($wpdb->prepare("SELECT package_key, payment_status FROM {$table} WHERE access_token_hash = %s LIMIT 1", hash('sha256', $token)));
-        if (!$row || 'paid' !== $row->payment_status || 'complete' !== $row->package_key) {
+        if ($registration_id) {
+            if (!is_user_logged_in()) { status_header(403); exit; }
+            $row = $wpdb->get_row($wpdb->prepare("SELECT user_id, package_key, payment_status FROM {$table} WHERE id = %d LIMIT 1", $registration_id));
+            if (!$row || (int)$row->user_id !== get_current_user_id()) { status_header(403); exit; }
+        } else {
+            $row = $wpdb->get_row($wpdb->prepare("SELECT user_id, package_key, payment_status FROM {$table} WHERE access_token_hash = %s LIMIT 1", hash('sha256', $token)));
+        }
+        $allowed_package = ('video' === $type) ? ('complete' === ($row->package_key ?? '')) : in_array(($row->package_key ?? ''), array('certificate', 'complete'), true);
+        if (!$row || 'paid' !== $row->payment_status || !$allowed_package) {
             status_header(403); exit;
         }
         $resources = self::resources();

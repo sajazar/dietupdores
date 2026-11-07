@@ -42,14 +42,14 @@ trait DietUp_Zibal_Trait {
                 wp_die('مبلغ تأییدشده با مبلغ سفارش مطابقت ندارد. برای بررسی با پشتیبانی تماس بگیرید.');
             }
             $wpdb->query($wpdb->prepare(
-                "UPDATE {$this->table} SET payment_status = 'paid', payment_ref_id = %s, paid_at = %s, license_status = 'pending', updated_at = %s WHERE id = %d AND payment_status <> 'paid'",
+                "UPDATE {$this->table} SET payment_status = 'paid', payment_ref_id = %s, paid_at = %s, license_status = CASE WHEN package_key = 'complete' THEN 'pending' ELSE 'not_issued' END, updated_at = %s WHERE id = %d AND payment_status <> 'paid'",
                 sanitize_text_field((string)($verified['refNumber'] ?? $verified['refnumber'] ?? '')),
                 current_time('mysql'), current_time('mysql'), $row->id
             ));
             $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $row->id));
         }
 
-        if ('paid' === $row->payment_status && 'pending' === $row->license_status) {
+        if ('paid' === $row->payment_status && 'complete' === $row->package_key && 'pending' === $row->license_status) {
             // Prevent concurrent callbacks from issuing duplicate licenses.
             $claimed = $wpdb->query($wpdb->prepare(
                 "UPDATE {$this->table} SET license_status = 'issuing', updated_at = %s WHERE id = %d AND license_status = 'pending'",
@@ -74,7 +74,8 @@ trait DietUp_Zibal_Trait {
         }
         $token = isset($_GET['dietup_access']) ? sanitize_text_field(wp_unslash($_GET['dietup_access'])) : '';
         if ($token && preg_match('/^[a-f0-9]{64}$/', $token)) {
-            wp_safe_redirect(add_query_arg('dietup_access', $token, home_url('/')));
+            $return_url = !empty($row->return_url) ? $row->return_url : home_url('/');
+            wp_safe_redirect(add_query_arg('dietup_access', $token, $return_url));
         } else {
             wp_safe_redirect(home_url('/'));
         }

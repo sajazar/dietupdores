@@ -84,7 +84,9 @@ final class DietUp_Plugin {
     public function assets() {
         if (!is_singular()) { return; }
         global $post;
-        if (!$post || !has_shortcode($post->post_content, 'dietup_registration')) { return; }
+        if (!$post) { return; }
+        $page_content = (string)$post->post_content . ' ' . (string)get_post_meta($post->ID, '_elementor_data', true);
+        if (false === strpos($page_content, 'dietup_registration') && false === strpos($page_content, 'dietup_my_courses')) { return; }
         wp_enqueue_style('dietup-form', DIETUP_URL . 'assets/css/frontend.css', array(), DIETUP_VERSION);
         wp_enqueue_script('dietup-form', DIETUP_URL . 'assets/js/frontend.js', array(), DIETUP_VERSION, true);
     }
