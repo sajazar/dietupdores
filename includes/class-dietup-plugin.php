@@ -188,7 +188,7 @@ final class DietUp_Plugin {
                 </label>
                 <label data-dietup-specialist hidden>تخصص پزشکی *
                     <select name="specialty"><option value="">انتخاب تخصص</option>
-                    <?php foreach (array('متخصص تغذیه','متخصص داخلی','متخصص غدد','متخصص قلب','متخصص کودکان','متخصص جراحی','متخصص پوست','سایر تخصص‌ها') as $specialty_option) : ?>
+                    <?php foreach (DietUp_Verification::specialties() as $specialty_option) : ?>
                     <option value="<?php echo esc_attr($specialty_option); ?>"><?php echo esc_html($specialty_option); ?></option><?php endforeach; ?>
                     </select>
                 </label>
@@ -278,7 +278,7 @@ final class DietUp_Plugin {
         $needs_certificate = in_array($package_key, array('certificate','complete'), true);
         if (!$full_name || !preg_match('/^09[0-9]{9}$/', $mobile) || !is_email($email) || !$university ||
             !in_array($profession, $valid_professions, true) || '' === $specialty_value ||
-            ('پزشک متخصص' === $profession && !in_array($specialty, array('متخصص تغذیه','متخصص داخلی','متخصص غدد','متخصص قلب','متخصص کودکان','متخصص جراحی','متخصص پوست','سایر تخصص‌ها'), true)) ||
+            ('پزشک متخصص' === $profession && !in_array($specialty, DietUp_Verification::specialties(), true)) ||
             ('پزشک متخصص' !== $profession && !$specialty_text) ||
             ('پزشک متخصص' === $profession && 'سایر تخصص‌ها' === $specialty && !$specialty_custom) ||
             !in_array($workplace, $valid_workplaces, true) ||
