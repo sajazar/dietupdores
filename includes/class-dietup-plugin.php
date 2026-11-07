@@ -16,6 +16,7 @@ final class DietUp_Plugin {
         add_shortcode('dietup_registration', array($this, 'render_shortcode'));
         add_action('wp_enqueue_scripts', array($this, 'assets'));
         add_action('admin_menu', array($this, 'admin_menu'));
+        add_action('admin_post_dietup_save_settings', array($this, 'save_settings'));
         add_action('admin_post_nopriv_dietup_register', array($this, 'handle_registration'));
         add_action('admin_post_dietup_register', array($this, 'handle_registration'));
         add_action('admin_post_dietup_export_csv', array($this, 'export_csv'));
@@ -205,6 +206,80 @@ final class DietUp_Plugin {
 
     public function admin_menu() {
         add_menu_page('مدیریت دایت‌آپ', 'دایت‌آپ', 'manage_options', 'dietup', array($this, 'admin_page'), 'dashicons-welcome-learn-more', 56);
+        add_submenu_page('dietup', 'تنظیمات اتصال‌ها', 'تنظیمات اتصال‌ها', 'manage_options', 'dietup-settings', array($this, 'settings_page'));
+    }
+
+    /**
+     * Read integration settings. Secrets are never printed back into the page.
+     */
+    private function get_settings() {
+        $saved = get_option('dietup_integration_settings', array());
+        return wp_parse_args(is_array($saved) ? $saved : array(), array(
+            'gateway_name' => '',
+            'gateway_merchant_id' => '',
+            'gateway_api_key' => '',
+            'gateway_payment_url' => '',
+            'gateway_verify_url' => '',
+            'gateway_sandbox' => 1,
+            'spotplayer_api_url' => '',
+            'spotplayer_api_key' => '',
+            'spotplayer_course_id' => '',
+        ));
+    }
+
+    public function settings_page() {
+        if (!current_user_can('manage_options')) { wp_die(esc_html__('دسترسی غیرمجاز', 'dietup')); }
+        $s = $this->get_settings();
+        echo '<div class="wrap"><h1>تنظیمات درگاه پرداخت و SpotPlayer</h1>';
+        if (isset($_GET['settings_saved']) && '1' === $_GET['settings_saved']) {
+            echo '<div class="notice notice-success is-dismissible"><p>تنظیمات ذخیره شد.</p></div>';
+        }
+        echo '<div class="notice notice-warning"><p><strong>توجه:</strong> این صفحه فعلاً اطلاعات اتصال را به‌صورت امن در تنظیمات وردپرس نگهداری می‌کند. تا زمان پیاده‌سازی و آزمایش آداپتور رسمی درگاه و API مستند SpotPlayer، ذخیره این مقادیر به معنی فعال‌شدن پرداخت یا صدور لایسنس نیست.</p></div>';
+        echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">';
+        echo '<input type="hidden" name="action" value="dietup_save_settings">';
+        wp_nonce_field('dietup_save_settings', 'dietup_settings_nonce');
+        echo '<h2>درگاه پرداخت</h2><table class="form-table"><tbody>';
+        echo '<tr><th><label for="dietup_gateway_name">نام درگاه / ارائه‌دهنده</label></th><td><input class="regular-text" id="dietup_gateway_name" name="gateway_name" value="'.esc_attr($s['gateway_name']).'" placeholder="مثلاً نام شرکت ارائه‌دهنده درگاه"></td></tr>';
+        echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
+        echo '<tr><th><label for="dietup_gateway_api_key">API Key / کلید محرمانه درگاه</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_gateway_api_key" name="gateway_api_key" value="" placeholder="'.($s['gateway_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'کلید محرمانه درگاه').'"><p class="description">کلید فعلی نمایش داده نمی‌شود. برای جایگزینی، مقدار جدید را وارد کنید.</p>'.($s['gateway_api_key'] ? '<label><input type="checkbox" name="clear_gateway_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
+        echo '<tr><th><label for="dietup_gateway_payment_url">آدرس درخواست پرداخت</label></th><td><input class="large-text" type="url" id="dietup_gateway_payment_url" name="gateway_payment_url" value="'.esc_attr($s['gateway_payment_url']).'" placeholder="https://..."></td></tr>';
+        echo '<tr><th><label for="dietup_gateway_verify_url">آدرس تأیید پرداخت (Verify)</label></th><td><input class="large-text" type="url" id="dietup_gateway_verify_url" name="gateway_verify_url" value="'.esc_attr($s['gateway_verify_url']).'" placeholder="https://..."></td></tr>';
+        echo '<tr><th>حالت آزمایشی</th><td><label><input type="checkbox" name="gateway_sandbox" value="1" '.checked((int)$s['gateway_sandbox'],1,false).'> درگاه در حالت Sandbox / آزمایشی باشد</label></td></tr>';
+        echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
+        echo '<tr><th><label for="dietup_spotplayer_api_url">آدرس API</label></th><td><input class="large-text" type="url" id="dietup_spotplayer_api_url" name="spotplayer_api_url" value="'.esc_attr($s['spotplayer_api_url']).'" placeholder="آدرس پایه API طبق مستندات رسمی"></td></tr>';
+        echo '<tr><th><label for="dietup_spotplayer_api_key">API Key</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_spotplayer_api_key" name="spotplayer_api_key" value="" placeholder="'.($s['spotplayer_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'SpotPlayer API Key').'"><p class="description">کلید فعلی نمایش داده نمی‌شود.</p>'.($s['spotplayer_api_key'] ? '<label><input type="checkbox" name="clear_spotplayer_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
+        echo '<tr><th><label for="dietup_spotplayer_course_id">شناسه دوره / Course ID</label></th><td><input class="regular-text" id="dietup_spotplayer_course_id" name="spotplayer_course_id" value="'.esc_attr($s['spotplayer_course_id']).'"></td></tr>';
+        echo '</tbody></table>';
+        echo '<p class="submit"><button type="submit" class="button button-primary">ذخیره تنظیمات اتصال</button></p></form></div>';
+    }
+
+    public function save_settings() {
+        if (!current_user_can('manage_options')) { wp_die(esc_html__('دسترسی غیرمجاز', 'dietup')); }
+        if (!isset($_POST['dietup_settings_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_settings_nonce'])), 'dietup_save_settings')) {
+            wp_die('درخواست نامعتبر است.');
+        }
+        $old = $this->get_settings();
+        $text_fields = array('gateway_name','gateway_merchant_id','spotplayer_course_id');
+        $new = $old;
+        foreach ($text_fields as $field) {
+            $new[$field] = isset($_POST[$field]) ? sanitize_text_field(wp_unslash($_POST[$field])) : '';
+        }
+        $url_fields = array('gateway_payment_url','gateway_verify_url','spotplayer_api_url');
+        foreach ($url_fields as $field) {
+            $raw = isset($_POST[$field]) ? esc_url_raw(wp_unslash($_POST[$field])) : '';
+            $new[$field] = ('' === $raw || 'https' === wp_parse_url($raw, PHP_URL_SCHEME)) ? $raw : '';
+        }
+        $new['gateway_sandbox'] = isset($_POST['gateway_sandbox']) ? 1 : 0;
+        foreach (array('gateway_api_key','spotplayer_api_key') as $secret) {
+            if (!empty($_POST['clear_'.$secret])) {
+                $new[$secret] = '';
+            } elseif (isset($_POST[$secret]) && '' !== trim((string)wp_unslash($_POST[$secret]))) {
+                $new[$secret] = sanitize_text_field(wp_unslash($_POST[$secret]));
+            }
+        }
+        update_option('dietup_integration_settings', $new, false);
+        wp_safe_redirect(add_query_arg(array('page'=>'dietup-settings','settings_saved'=>'1'), admin_url('admin.php')));
+        exit;
     }
 
     public function admin_page() {
