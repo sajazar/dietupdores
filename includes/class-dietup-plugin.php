@@ -179,7 +179,7 @@ final class DietUp_Plugin {
     }
 
     public function admin_menu() {
-        add_menu_page('ثبت‌نام دوره دایت‌آپ', 'دایت‌آپ', 'manage_options', 'dietup', array($this, 'admin_page'), 'dashicons-welcome-learn-more', ingress);
+        add_menu_page('ثبت‌نام دوره دایت‌آپ', 'دایت‌آپ', 'manage_options', 'dietup', array($this, 'admin_page'), 'dashicons-welcome-learn-more', 56);
     }
 
     public function admin_page() {
