@@ -40,7 +40,10 @@ final class DietUp_User_Accounts {
                 $wpdb->query("ALTER TABLE " . self::$table . " ADD COLUMN {$column} {$definition}");
             }
         }
-        $wpdb->query("ALTER TABLE " . self::$table . " ADD KEY user_id (user_id)");
+        $index_exists = $wpdb->get_var($wpdb->prepare("SHOW INDEX FROM " . self::$table . " WHERE Key_name = %s", 'user_id'));
+        if (!$index_exists) {
+            $wpdb->query("ALTER TABLE " . self::$table . " ADD KEY user_id (user_id)");
+        }
         update_option('dietup_user_layer_db_version', '1.0.0', false);
     }
 
@@ -64,6 +67,16 @@ final class DietUp_User_Accounts {
             return '<div class="dietup-notice">برای ثبت‌نام در دوره، ابتدا از طریق سیستم ورود قالب وارد حساب کاربری خود شوید. <a href="' . esc_url(wp_login_url(get_permalink())) . '">ورود به حساب کاربری</a></div>';
         }
         $user = wp_get_current_user();
+        if (!empty($_GET['dietup_access'])) {
+            $token = sanitize_text_field(wp_unslash($_GET['dietup_access']));
+            if (preg_match('/^[a-f0-9]{64}$/', $token)) {
+                global $wpdb;
+                $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM " . self::$table . " WHERE access_token_hash = %s LIMIT 1", hash('sha256', $token)));
+                if ($row && 'paid' === $row->payment_status && (int)$row->user_id === get_current_user_id()) {
+                    return '<div class="dietup-wrap">' . self::result_markup($row, $token) . '</div>';
+                }
+            }
+        }
         $status = isset($_GET['dietup_status']) ? sanitize_key(wp_unslash($_GET['dietup_status'])) : '';
         ob_start();
         echo '<div class="dietup-wrap" dir="rtl">';
