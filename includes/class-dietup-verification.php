@@ -55,6 +55,7 @@ final class DietUp_Verification {
     public static function init() {
         add_action('admin_post_dietup_admin_view_file', array(__CLASS__, 'admin_view_file'));
         add_action('admin_post_dietup_review_documents', array(__CLASS__, 'review_documents'));
+        add_action('admin_post_dietup_save_specialties', array(__CLASS__, 'save_specialties'));
         add_action('admin_post_dietup_upload_certificate', array(__CLASS__, 'upload_certificate'));
         add_action('admin_post_dietup_delete_certificate', array(__CLASS__, 'delete_certificate'));
         add_action('admin_post_dietup_resubmit_documents', array(__CLASS__, 'resubmit_documents'));
@@ -209,6 +210,27 @@ final class DietUp_Verification {
         $wpdb->delete($table, array('registration_id' => absint($registration_id), 'document_type' => $type), array('%d','%s'));
     }
 
+    public static function specialties() {
+        $defaults = array('متخصص تغذیه','متخصص داخلی','متخصص غدد','متخصص قلب','متخصص کودکان','متخصص جراحی','متخصص پوست','سایر تخصص‌ها');
+        $saved = get_option('dietup_specialty_options', $defaults);
+        if (!is_array($saved)) { $saved = $defaults; }
+        $saved = array_values(array_unique(array_filter(array_map('sanitize_text_field', $saved))));
+        if (!in_array('سایر تخصص‌ها', $saved, true)) { $saved[] = 'سایر تخصص‌ها'; }
+        return $saved;
+    }
+
+    public static function save_specialties() {
+        if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
+        if (!isset($_POST['dietup_specialties_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_specialties_nonce'])), 'dietup_save_specialties')) { wp_die('درخواست نامعتبر است.'); }
+        $raw = sanitize_textarea_field(wp_unslash($_POST['specialties'] ?? ''));
+        $items = array_values(array_unique(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $raw)))));
+        $items = array_slice($items, 0, 100);
+        if (!$items) { wp_die('حداقل یک تخصص وارد کنید.'); }
+        if (!in_array('سایر تخصص‌ها', $items, true)) { $items[] = 'سایر تخصص‌ها'; }
+        update_option('dietup_specialty_options', $items, false);
+        wp_safe_redirect(admin_url('admin.php?page=dietup-verification&specialties_saved=1')); exit;
+    }
+
     public static function render_admin_page() {
         if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
         global $wpdb;
@@ -216,6 +238,10 @@ final class DietUp_Verification {
         $docs = self::documents_table();
         $rows = $wpdb->get_results("SELECT * FROM {$registrations} ORDER BY id DESC LIMIT 200");
         echo '<div class="wrap"><h1>مدارک تخصصی و گواهی کاربران</h1><p>حداکثر ۲۰۰ ثبت‌نام آخر نمایش داده می‌شود. فایل‌ها خصوصی هستند و فقط مدیر مجاز به مشاهده آن‌هاست.</p>';
+        if (isset($_GET['specialties_saved'])) { echo '<div class="notice notice-success"><p>فهرست تخصص‌ها ذخیره شد.</p></div>'; }
+        echo '<details class="postbox" style="padding:12px;margin:12px 0"><summary><strong>مدیریت فهرست تخصص‌های پزشکی</strong></summary><form method="post" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_save_specialties">';
+        wp_nonce_field('dietup_save_specialties', 'dietup_specialties_nonce');
+        echo '<p>هر تخصص را در یک خط وارد کنید. گزینه «سایر تخصص‌ها» به‌صورت سیستمی حفظ می‌شود.</p><textarea name="specialties" rows="8" class="large-text">'.esc_textarea(implode("\n", array_diff(self::specialties(), array('سایر تخصص‌ها')))).'</textarea><p><button class="button button-primary">ذخیره فهرست تخصص‌ها</button></p></form></details>';
         foreach ($rows as $row) {
             $documents = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$docs} WHERE registration_id=%d AND document_type='qualification' ORDER BY id ASC", $row->id));
             $cert = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$docs} WHERE registration_id=%d AND document_type='certificate' ORDER BY id DESC LIMIT 1", $row->id));
