@@ -211,7 +211,7 @@ final class DietUp_Private_Files {
         header('X-Content-Type-Options: nosniff');
         header('Content-Type: ' . ('video' === $type ? 'video/mp4' : 'application/pdf'));
         header('Content-Length: ' . (string)filesize($path));
-        header('Content-Disposition: attachment; filename="download.' . ('video' === $type ? 'mp4' : 'pdf') . '"; filename*=UTF-8\\'\\'' . rawurlencode($filename));
+        header('Content-Disposition: attachment; filename="download.' . ('video' === $type ? 'mp4' : 'pdf') . '"; filename*=UTF-8\'\'' . rawurlencode($filename));
         readfile($path);
         exit;
     }
