@@ -2,7 +2,7 @@
 /**
  * Plugin Name: DietUp Course Registration
  * Description: فرم ثبت‌نام اختصاصی دوره دایت‌آپ و مدیریت ثبت‌نام‌کنندگان.
- * Version: 0.2.2
+ * Version: 0.3.0
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * Author: DietUp
