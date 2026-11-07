@@ -191,7 +191,7 @@ final class DietUp_Plugin {
             'terms_accepted' => 1, 'payment_status' => 'pending',
             'license_status' => 'not_issued', 'created_at' => current_time('mysql')
         );
-        $formats = array('%s','%s','%s','%s','%s','%s','%s','%s','%d','%s','%d','%s','%s');
+        $formats = array('%s','%s','%s','%s','%s','%s','%s','%s','%d','%s','%d','%s','%s','%s');
         if (null === $age) {
             $data['age'] = null;
             $formats[] = '%s';
