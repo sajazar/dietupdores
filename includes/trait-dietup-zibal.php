@@ -30,7 +30,7 @@ trait DietUp_Zibal_Trait {
 
         if ('paid' !== $row->payment_status) {
             $verified = DietUp_Integrations::zibal_verify($track_id);
-            if (is_wp_error($verified) || (int)($verified['result'] ?? 0) !== 100 ||
+            if (is_wp_error($verified) || !in_array((int)($verified['result'] ?? 0), array(100, 201), true) ||
                 (int)($verified['amount'] ?? 0) !== ((int)$row->package_price * 10)) {
                 $wpdb->update($this->table, array('payment_status' => 'failed', 'updated_at' => current_time('mysql')), array('id' => $row->id, 'payment_status' => 'pending'));
                 wp_die('پرداخت توسط زیبال تأیید نشد یا مبلغ تراکنش با سفارش مطابقت ندارد. اگر وجه کسر شده است با پشتیبانی تماس بگیرید.');
