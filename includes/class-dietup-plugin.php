@@ -430,9 +430,9 @@ final class DietUp_Plugin {
         wp_nonce_field('dietup_export_xlsx', 'dietup_xlsx_nonce');
         echo '<input type="hidden" name="payment_status" value="' . esc_attr($status) . '"><input type="hidden" name="package_key" value="' . esc_attr($package) . '"><input type="hidden" name="s" value="' . esc_attr($search) . '">';
         echo '<button class="button">دریافت فایل Excel (XLSX)</button></form><p>برای جلوگیری از کندی، حداکثر ۵۰۰ رکورد در این فهرست نمایش داده می‌شود.</p>';
-        echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th></tr></thead><tbody>';
+        echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>تخصص / رشته</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th></tr></thead><tbody>';
         if ($rows) { foreach ($rows as $r) {
-            echo '<tr><td>'.esc_html($r->id).'</td><td>'.esc_html($r->full_name).'</td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).'</td><td>'.esc_html($this->payment_label($r->payment_status)).'</td><td>'.esc_html($this->license_label($r->license_status));
+            echo '<tr><td>'.esc_html($r->id).'</td><td>'.esc_html($r->full_name).'</td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->specialty).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).'</td><td>'.esc_html($this->payment_label($r->payment_status)).'</td><td>'.esc_html($this->license_label($r->license_status));
             if ('failed' === $r->license_status && 'paid' === $r->payment_status) {
                 echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="dietup_retry_license"><input type="hidden" name="registration_id" value="' . esc_attr($r->id) . '">';
                 wp_nonce_field('dietup_retry_license_' . $r->id, 'dietup_retry_nonce');
@@ -523,7 +523,7 @@ final class DietUp_Plugin {
         $sql = "SELECT * FROM {$this->table} WHERE " . implode(' AND ', $where) . ' ORDER BY id DESC';
         $rows = $args ? $wpdb->get_results($wpdb->prepare($sql, $args), ARRAY_A) : $wpdb->get_results($sql, ARRAY_A);
 
-        $headers = array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','محل فعالیت','توضیحات محل','پکیج','مبلغ تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت');
+        $headers = array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','تخصص / رشته','محل فعالیت','توضیحات محل','پکیج','مبلغ تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت');
         $sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
         $row_number = 1;
         $sheet .= '<row r="1">';
@@ -533,7 +533,7 @@ final class DietUp_Plugin {
             $row_number++;
             $values = array(
                 $record['id'], $record['full_name'], $record['mobile'], $record['email'], $record['university'], $record['age'],
-                $record['profession'], $record['workplace'], $record['workplace_other'], $record['package_key'], $record['package_price'],
+                $record['profession'], $record['specialty'], $record['workplace'], $record['workplace_other'], $record['package_key'], $record['package_price'],
                 $record['certificate_name'], $record['payment_status'], $record['payment_ref_id'], $record['license_status'],
                 $record['created_at'], $record['paid_at']
             );
@@ -584,9 +584,9 @@ final class DietUp_Plugin {
         header('Content-Disposition: attachment; filename=dietup-registrations-'.gmdate('Y-m-d').'.csv');
         $out = fopen('php://output','w');
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','محل فعالیت','توضیحات محل','پکیج','مبلغ تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت'));
+        fputcsv($out, array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','تخصص / رشته','محل فعالیت','توضیحات محل','پکیج','مبلغ تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت'));
         foreach ($rows as $r) {
-            fputcsv($out, array($r['id'],$r['full_name'],$r['mobile'],$r['email'],$r['university'],$r['age'],$r['profession'],$r['workplace'],$r['workplace_other'],$r['package_key'],$r['package_price'],$r['certificate_name'],$r['payment_status'],$r['payment_ref_id'],$r['license_status'],$r['created_at'],$r['paid_at']));
+            fputcsv($out, array($r['id'],$r['full_name'],$r['mobile'],$r['email'],$r['university'],$r['age'],$r['profession'],$r['specialty'],$r['workplace'],$r['workplace_other'],$r['package_key'],$r['package_price'],$r['certificate_name'],$r['payment_status'],$r['payment_ref_id'],$r['license_status'],$r['created_at'],$r['paid_at']));
         }
         fclose($out); exit;
     }
