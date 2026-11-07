@@ -221,19 +221,24 @@ final class DietUp_Verification {
             echo '</select> <input type="text" name="rejection_reason" class="regular-text" value="'.esc_attr($row->document_rejection_reason ?? '').'" placeholder="دلیل رد یا درخواست اصلاح مدرک">';
             echo ' <button class="button">ذخیره وضعیت بررسی</button></form>';
             echo '<hr><h3>گواهی اختصاصی</h3>';
-            if ($cert) {
-                $url = wp_nonce_url(add_query_arg(array('action'=>'dietup_admin_view_file','document_id'=>(int)$cert->id), admin_url('admin-post.php')), 'dietup_admin_file_'.$cert->id);
-                echo '<p>فایل فعلی: <a href="'.esc_url($url).'" target="_blank" rel="noopener">'.esc_html($cert->original_filename).'</a> — '.esc_html(size_format((int)$cert->file_size)).'</p>';
-            } else { echo '<p>هنوز گواهی بارگذاری نشده است.</p>'; }
-            echo '<form method="post" enctype="multipart/form-data" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_upload_certificate"><input type="hidden" name="registration_id" value="'.esc_attr($row->id).'">';
-            wp_nonce_field('dietup_upload_certificate_'.$row->id, 'dietup_certificate_nonce');
-            echo '<input type="file" name="dietup_certificate" accept=".pdf,.jpg,.jpeg,.png" required> <button class="button button-primary">بارگذاری / جایگزینی گواهی</button></form>';
-            if ($cert) {
-                echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" style="margin-top:8px"><input type="hidden" name="action" value="dietup_delete_certificate"><input type="hidden" name="registration_id" value="'.esc_attr($row->id).'">';
-                wp_nonce_field('dietup_delete_certificate_'.$row->id, 'dietup_delete_certificate_nonce');
-                echo '<button class="button" onclick="return confirm(\'گواهی حذف شود؟\')">حذف گواهی</button></form>';
+            if (in_array($row->package_key, array('certificate','complete'), true)) {
+                if ($cert) {
+                    $url = wp_nonce_url(add_query_arg(array('action'=>'dietup_admin_view_file','document_id'=>(int)$cert->id), admin_url('admin-post.php')), 'dietup_admin_file_'.$cert->id);
+                    echo '<p>فایل فعلی: <a href="'.esc_url($url).'" target="_blank" rel="noopener">'.esc_html($cert->original_filename).'</a> — '.esc_html(size_format((int)$cert->file_size)).'</p>';
+                } else { echo '<p>هنوز گواهی بارگذاری نشده است.</p>'; }
+                echo '<form method="post" enctype="multipart/form-data" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_upload_certificate"><input type="hidden" name="registration_id" value="'.esc_attr($row->id).'">';
+                wp_nonce_field('dietup_upload_certificate_'.$row->id, 'dietup_certificate_nonce');
+                echo '<input type="file" name="dietup_certificate" accept=".pdf,.jpg,.jpeg,.png" required> <button class="button button-primary">بارگذاری / جایگزینی گواهی</button></form>';
+                if ($cert) {
+                    echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" style="margin-top:8px"><input type="hidden" name="action" value="dietup_delete_certificate"><input type="hidden" name="registration_id" value="'.esc_attr($row->id).'">';
+                    wp_nonce_field('dietup_delete_certificate_'.$row->id, 'dietup_delete_certificate_nonce');
+                    echo '<button class="button" onclick="return confirm(\'گواهی حذف شود؟\')">حذف گواهی</button></form>';
+                }
+                echo '<p>وضعیت گواهی: '.esc_html(($row->certificate_status ?? 'not_issued') === 'available' ? 'آماده تحویل' : (($row->certificate_status ?? '') === 'delivered' ? 'تحویل شده' : 'صادر نشده')).'</p>';
+            } else {
+                echo '<p>این پکیج شامل گواهی اختصاصی نیست.</p>';
             }
-            echo '<p>وضعیت گواهی: '.esc_html(($row->certificate_status ?? 'not_issued') === 'available' ? 'آماده تحویل' : (($row->certificate_status ?? '') === 'delivered' ? 'تحویل شده' : 'صادر نشده')).'</p></div>';
+            echo '</div>';
         }
         echo '</div>';
     }
@@ -265,7 +270,9 @@ final class DietUp_Verification {
         if (!$id || !isset($_POST['dietup_certificate_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_certificate_nonce'])), 'dietup_upload_certificate_'.$id)) { wp_die('درخواست نامعتبر است.'); }
         global $wpdb;
         $registrations_table = $wpdb->prefix.'dietup_registrations';
-        if (!$wpdb->get_var($wpdb->prepare("SELECT id FROM {$registrations_table} WHERE id=%d", $id))) { wp_die('ثبت‌نام موردنظر پیدا نشد.'); }
+        $registration = $wpdb->get_row($wpdb->prepare("SELECT id,package_key FROM {$registrations_table} WHERE id=%d", $id));
+        if (!$registration) { wp_die('ثبت‌نام موردنظر پیدا نشد.'); }
+        if (!in_array($registration->package_key, array('certificate','complete'), true)) { wp_die('این پکیج شامل گواهی اختصاصی نیست.'); }
         $stored = self::validate_and_store($_FILES['dietup_certificate'] ?? array());
         if (is_wp_error($stored)) { wp_die(esc_html($stored->get_error_message())); }
         $inserted = $wpdb->insert(self::documents_table(), array(
@@ -378,11 +385,13 @@ final class DietUp_Verification {
             wp_nonce_field('dietup_resubmit_documents_'.$registration->id, 'dietup_resubmit_nonce');
             echo '<label>بارگذاری مجدد مدارک (حداکثر ۵ فایل، هر فایل ۵ مگابایت) <input type="file" name="dietup_documents[]" accept=".pdf,.jpg,.jpeg,.png" multiple required></label><button type="submit">ارسال مدارک اصلاح‌شده</button></form>';
         }
-        $certificate_status = $registration->certificate_status ?? 'not_issued';
-        if (in_array($certificate_status, array('available','delivered'), true)) {
-            echo '<p><strong>گواهی اختصاصی شما آماده است.</strong></p><p><a href="'.esc_url(self::account_certificate_url($registration->id, true)).'" target="_blank" rel="noopener">مشاهده و چاپ گواهی</a> | <a href="'.esc_url(self::account_certificate_url($registration->id, false)).'">دانلود گواهی</a></p>';
-        } else {
-            echo '<p>گواهی اختصاصی شما هنوز بارگذاری نشده است.</p>';
+        if (in_array($registration->package_key, array('certificate','complete'), true)) {
+            $certificate_status = $registration->certificate_status ?? 'not_issued';
+            if (in_array($certificate_status, array('available','delivered'), true)) {
+                echo '<p><strong>گواهی اختصاصی شما آماده است.</strong></p><p><a href="'.esc_url(self::account_certificate_url($registration->id, true)).'" target="_blank" rel="noopener">مشاهده و چاپ گواهی</a> | <a href="'.esc_url(self::account_certificate_url($registration->id, false)).'">دانلود گواهی</a></p>';
+            } else {
+                echo '<p>گواهی اختصاصی شما هنوز بارگذاری نشده است.</p>';
+            }
         }
         echo '</div>';
     }
