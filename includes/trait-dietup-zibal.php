@@ -30,18 +30,22 @@ trait DietUp_Zibal_Trait {
 
         if ('paid' !== $row->payment_status) {
             $verified = DietUp_Integrations::zibal_verify($track_id);
-            if (is_wp_error($verified) || !in_array((int)($verified['result'] ?? 0), array(100, 201), true) ||
-                (int)($verified['amount'] ?? 0) !== ((int)$row->package_price * 10)) {
-                $wpdb->update($this->table, array('payment_status' => 'failed', 'updated_at' => current_time('mysql')), array('id' => $row->id, 'payment_status' => 'pending'));
-                wp_die('پرداخت توسط زیبال تأیید نشد یا مبلغ تراکنش با سفارش مطابقت ندارد. اگر وجه کسر شده است با پشتیبانی تماس بگیرید.');
+            if (is_wp_error($verified)) {
+                // A temporary network error must not permanently mark a possibly-paid order as failed.
+                wp_die('ارتباط با زیبال برای بررسی پرداخت موقتاً برقرار نشد. لطفاً همین نشانی را چند دقیقه بعد دوباره باز کنید؛ وضعیت پرداخت تغییر داده نشده است.');
             }
-            $wpdb->update($this->table, array(
-                'payment_status' => 'paid',
-                'payment_ref_id' => sanitize_text_field((string)($verified['refNumber'] ?? $verified['refnumber'] ?? '')),
-                'paid_at' => current_time('mysql'),
-                'license_status' => 'pending',
-                'updated_at' => current_time('mysql')
-            ), array('id' => $row->id, 'payment_status' => 'pending'));
+            if (!in_array((int)($verified['result'] ?? 0), array(100, 201), true)) {
+                $wpdb->update($this->table, array('payment_status' => 'failed', 'updated_at' => current_time('mysql')), array('id' => $row->id, 'payment_status' => 'pending'));
+                wp_die('زیبال پرداخت را تأیید نکرده است. اگر وجه کسر شده است با پشتیبانی تماس بگیرید.');
+            }
+            if ((int)($verified['amount'] ?? 0) !== ((int)$row->package_price * 10)) {
+                wp_die('مبلغ تأییدشده با مبلغ سفارش مطابقت ندارد. برای بررسی با پشتیبانی تماس بگیرید.');
+            }
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$this->table} SET payment_status = 'paid', payment_ref_id = %s, paid_at = %s, license_status = 'pending', updated_at = %s WHERE id = %d AND payment_status <> 'paid'",
+                sanitize_text_field((string)($verified['refNumber'] ?? $verified['refnumber'] ?? '')),
+                current_time('mysql'), current_time('mysql'), $row->id
+            ));
             $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $row->id));
         }
 
@@ -55,7 +59,9 @@ trait DietUp_Zibal_Trait {
                 $row->license_status = 'issuing';
                 $license = DietUp_Integrations::spotplayer_license($row);
                 if (is_wp_error($license)) {
-                    $wpdb->update($this->table, array('license_status' => 'failed', 'updated_at' => current_time('mysql')), array('id' => $row->id));
+                    // Missing configuration is definitive; network/response failures are ambiguous.
+                    $license_state = ('dietup_spot_config' === $license->get_error_code()) ? 'failed' : 'unknown';
+                    $wpdb->update($this->table, array('license_status' => $license_state, 'updated_at' => current_time('mysql')), array('id' => $row->id));
                 } else {
                     $wpdb->update($this->table, array(
                         'license_status' => 'issued',
@@ -89,8 +95,10 @@ trait DietUp_Zibal_Trait {
         if ('issued' === $row->license_status && $row->license_key) {
             echo '<h2>کلید لایسنس SpotPlayer</h2><textarea readonly style="width:100%;min-height:120px;direction:ltr">' . esc_textarea($row->license_key) . '</textarea>';
             echo '<p>این کلید را کپی کرده و در نرم‌افزار SpotPlayer وارد کنید.</p>';
+        } elseif ('unknown' === $row->license_status) {
+            echo '<p>پرداخت تأیید شده است، اما پاسخ سرویس صدور لایسنس نامشخص بوده است. برای جلوگیری از صدور تکراری، درخواست خودکار دوباره ارسال نمی‌شود. لطفاً با پشتیبانی تماس بگیرید تا وضعیت در پنل SpotPlayer بررسی شود.</p>';
         } else {
-            echo '<p>پرداخت شما تأیید شده است، اما صدور لایسنس هنوز تکمیل نشده. بعداً همین لینک را دوباره باز کنید یا با پشتیبانی تماس بگیرید.</p>';
+            echo '<p>پرداخت شما تأیید شده است، اما صدور لایسنس هنوز تکمیل نشده. لطفاً بعداً همین لینک را دوباره باز کنید یا با پشتیبانی تماس بگیرید.</p>';
         }
         if ('complete' === $row->package_key) {
             $resources = DietUp_Private_Files::resources();
