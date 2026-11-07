@@ -27,7 +27,7 @@
             var isSpecialist = profession && profession.value === 'پزشک متخصص';
             if (specialist) specialist.hidden = !isSpecialist;
             if (specialistSelect) specialistSelect.required = !!isSpecialist;
-            if (generalSpecialty) generalSpecialty.hidden = !!profession && isSpecialist;
+            if (generalSpecialty) generalSpecialty.hidden = !profession || !profession.value || isSpecialist;
             if (generalSpecialtyInput) generalSpecialtyInput.required = !!profession && !isSpecialist && profession.value !== '';
             var needsOtherSpecialty = isSpecialist && specialistSelect && specialistSelect.value === 'سایر تخصص‌ها';
             if (specialistOther) specialistOther.hidden = !needsOtherSpecialty;
