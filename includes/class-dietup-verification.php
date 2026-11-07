@@ -345,8 +345,8 @@ final class DietUp_Verification {
         if (!$registration_id || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'] ?? '')), 'dietup_account_certificate_'.$registration_id)) { status_header(404); exit; }
         global $wpdb;
         $registrations = $wpdb->prefix.'dietup_registrations';
-        $reg = $wpdb->get_row($wpdb->prepare("SELECT user_id,certificate_status FROM {$registrations} WHERE id=%d", $registration_id));
-        if (!$reg || (int)$reg->user_id !== get_current_user_id() || !in_array($reg->certificate_status, array('available','delivered'), true)) { status_header(403); exit; }
+        $reg = $wpdb->get_row($wpdb->prepare("SELECT user_id,certificate_status,payment_status,package_key FROM {$registrations} WHERE id=%d", $registration_id));
+        if (!$reg || (int)$reg->user_id !== get_current_user_id() || 'paid' !== $reg->payment_status || !in_array($reg->package_key, array('certificate','complete'), true) || !in_array($reg->certificate_status, array('available','delivered'), true)) { status_header(403); exit; }
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM ".self::documents_table()." WHERE registration_id=%d AND document_type='certificate' ORDER BY id DESC LIMIT 1", $registration_id));
         if (!$row) { status_header(404); exit; }
         $inline = isset($_GET['inline']) && '1' === $_GET['inline'];
@@ -385,7 +385,7 @@ final class DietUp_Verification {
             wp_nonce_field('dietup_resubmit_documents_'.$registration->id, 'dietup_resubmit_nonce');
             echo '<label>بارگذاری مجدد مدارک (حداکثر ۵ فایل، هر فایل ۵ مگابایت) <input type="file" name="dietup_documents[]" accept=".pdf,.jpg,.jpeg,.png" multiple required></label><button type="submit">ارسال مدارک اصلاح‌شده</button></form>';
         }
-        if (in_array($registration->package_key, array('certificate','complete'), true)) {
+        if ('paid' === $registration->payment_status && in_array($registration->package_key, array('certificate','complete'), true)) {
             $certificate_status = $registration->certificate_status ?? 'not_issued';
             if (in_array($certificate_status, array('available','delivered'), true)) {
                 echo '<p><strong>گواهی اختصاصی شما آماده است.</strong></p><p><a href="'.esc_url(self::account_certificate_url($registration->id, true)).'" target="_blank" rel="noopener">مشاهده و چاپ گواهی</a> | <a href="'.esc_url(self::account_certificate_url($registration->id, false)).'">دانلود گواهی</a></p>';
