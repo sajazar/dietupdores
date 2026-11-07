@@ -300,15 +300,8 @@ final class DietUp_Plugin {
             'license_status' => 'not_issued', 'access_token_hash' => hash('sha256', $access_token = bin2hex(random_bytes(32))), 'created_at' => current_time('mysql'),
             'user_id' => get_current_user_id()
         );
-        $formats = array('%s','%s','%s','%s','%s','%s','%s','%s','%d','%s','%d','%s','%s','%s','%s','%d');
-        if (null === $age) {
-            $data['age'] = null;
-            $formats[] = '%s';
-        } else {
-            $data['age'] = $age;
-            $formats[] = '%d';
-        }
-        $ok = $wpdb->insert($this->table, $data, $formats);
+        $data['age'] = $age;
+        $ok = $wpdb->insert($this->table, $data);
         if (!$ok) { $this->redirect_status('error'); }
         $registration_id = (int)$wpdb->insert_id;
         $documents_result = DietUp_Verification::store_registration_documents($registration_id, $_FILES['dietup_documents'] ?? array());
