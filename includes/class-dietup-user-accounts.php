@@ -63,10 +63,6 @@ final class DietUp_User_Accounts {
     }
 
     public static function registration_shortcode() {
-        if (!is_user_logged_in()) {
-            return '<div class="dietup-notice">برای ثبت‌نام در دوره، ابتدا از طریق سیستم ورود قالب وارد حساب کاربری خود شوید. <a href="' . esc_url(wp_login_url(get_permalink())) . '">ورود به حساب کاربری</a></div>';
-        }
-        $user = wp_get_current_user();
         if (!empty($_GET['dietup_access'])) {
             $token = sanitize_text_field(wp_unslash($_GET['dietup_access']));
             if (preg_match('/^[a-f0-9]{64}$/', $token)) {
@@ -77,6 +73,10 @@ final class DietUp_User_Accounts {
                 }
             }
         }
+        if (!is_user_logged_in()) {
+            return '<div class="dietup-notice">برای ثبت‌نام در دوره، ابتدا از طریق سیستم ورود قالب وارد حساب کاربری خود شوید. <a href="' . esc_url(wp_login_url(get_permalink())) . '">ورود به حساب کاربری</a></div>';
+        }
+        $user = wp_get_current_user();
         $status = isset($_GET['dietup_status']) ? sanitize_key(wp_unslash($_GET['dietup_status'])) : '';
         ob_start();
         echo '<div class="dietup-wrap" dir="rtl">';
