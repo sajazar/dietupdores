@@ -13,6 +13,7 @@ final class DietUp_Plugin {
     private function __construct() {
         global $wpdb;
         $this->table = $wpdb->prefix . 'dietup_registrations';
+        if (get_option('dietup_db_version') !== DIETUP_VERSION) { self::activate(); }
         add_shortcode('dietup_registration', array($this, 'render_shortcode'));
         add_action('wp_enqueue_scripts', array($this, 'assets'));
         add_action('admin_menu', array($this, 'admin_menu'));
