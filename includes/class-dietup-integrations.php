@@ -6,11 +6,11 @@ if (!defined('ABSPATH')) { exit; }
  * Amounts stored by DietUp are Toman; Zibal expects Rial.
  */
 final class DietUp_Integrations {
-    public static function zibal_request($registration) {
+    public static function zibal_request($registration, $access_token = '') {
         $s = get_option('dietup_integration_settings', array());
         $merchant = isset($s['gateway_merchant_id']) ? trim($s['gateway_merchant_id']) : '';
         if (!$merchant) { return new WP_Error('dietup_zibal_config', 'شناسه پذیرنده زیبال تنظیم نشده است.'); }
-        $callback = add_query_arg('action', 'dietup_zibal_callback', admin_url('admin-post.php'));
+        $callback = add_query_arg(array('action' => 'dietup_zibal_callback', 'dietup_access' => $access_token), admin_url('admin-post.php'));
         $body = array(
             'merchant' => $merchant,
             'amount' => (int) $registration->package_price * 10,
