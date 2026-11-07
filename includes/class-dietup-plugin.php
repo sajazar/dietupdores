@@ -147,9 +147,13 @@ final class DietUp_Plugin {
     public function assets() {
         if (!is_singular()) { return; }
         global $post;
-        if (!$post || !has_shortcode($post->post_content, 'dietup_registration')) { return; }
+        $has_form = $post && has_shortcode($post->post_content, 'dietup_registration');
+        $is_account = function_exists('is_account_page') && is_account_page();
+        if (!$has_form && !$is_account) { return; }
         wp_enqueue_style('dietup-form', DIETUP_URL . 'assets/css/frontend.css', array(), DIETUP_VERSION);
-        wp_enqueue_script('dietup-form', DIETUP_URL . 'assets/js/frontend.js', array(), DIETUP_VERSION, true);
+        if ($has_form) {
+            wp_enqueue_script('dietup-form', DIETUP_URL . 'assets/js/frontend.js', array(), DIETUP_VERSION, true);
+        }
     }
 
     public function render_shortcode() {
