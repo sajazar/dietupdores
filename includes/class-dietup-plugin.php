@@ -15,6 +15,7 @@ final class DietUp_Plugin {
         global $wpdb;
         $this->table = $wpdb->prefix . 'dietup_registrations';
         DietUp_Private_Files::init();
+        DietUp_Verification::init();
         if (get_option('dietup_db_version') !== DIETUP_VERSION) { self::activate(); }
         add_shortcode('dietup_registration', array($this, 'render_shortcode'));
         add_action('wp_enqueue_scripts', array($this, 'assets'));
@@ -47,6 +48,13 @@ final class DietUp_Plugin {
             university varchar(190) NOT NULL,
             age smallint(5) unsigned NULL,
             profession varchar(100) NOT NULL,
+            specialty varchar(190) NOT NULL DEFAULT '',
+            document_status varchar(30) NOT NULL DEFAULT 'pending',
+            document_rejection_reason text NULL,
+            document_reviewed_at datetime NULL,
+            document_reviewed_by bigint(20) unsigned NULL,
+            certificate_status varchar(30) NOT NULL DEFAULT 'not_issued',
+            certificate_uploaded_at datetime NULL,
             workplace varchar(100) NOT NULL,
             workplace_other varchar(190) NULL,
             package_key varchar(40) NOT NULL,
@@ -74,6 +82,7 @@ final class DietUp_Plugin {
             KEY created_at (created_at)
         ) {$charset};";
         dbDelta($sql);
+        DietUp_Verification::install();
         add_rewrite_endpoint('dietup-courses', EP_ROOT | EP_PAGES);
         flush_rewrite_rules();
         update_option('dietup_db_version', DIETUP_VERSION);
@@ -98,7 +107,8 @@ final class DietUp_Plugin {
         if (!is_user_logged_in()) { echo '<p>برای مشاهده ثبت‌نام‌های دایت‌آپ ابتدا وارد حساب کاربری شوید.</p>'; return; }
         global $wpdb;
         $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$this->table} WHERE user_id = %d ORDER BY id DESC LIMIT 100", get_current_user_id()));
-        $telegram = $this->get_settings()['telegram_url'];
+        $settings = $this->get_settings();
+        $telegram = $settings['telegram_url'];
         echo '<div class="dietup-account-courses" dir="rtl"><h2>دوره‌های دایت‌آپ من</h2>';
         if (!$rows) { echo '<p>هنوز ثبت‌نامی به حساب کاربری شما متصل نشده است.</p></div>'; return; }
         foreach ($rows as $row) {
@@ -109,7 +119,7 @@ final class DietUp_Plugin {
             echo '<p>وضعیت پرداخت: <strong>' . esc_html($this->payment_label($row->payment_status)) . '</strong></p>';
             if ('paid' === $row->payment_status) {
                 echo '<p>وضعیت لایسنس: ' . esc_html($this->license_label($row->license_status)) . '</p>';
-                if ('issued' === $row->license_status && $row->license_key) { echo '<label>کلید لایسنس SpotPlayer</label><textarea readonly style="width:100%;min-height:90px;direction:ltr">' . esc_textarea($row->license_key) . '</textarea>'; }
+                if ('issued' === $row->license_status && $row->license_key && in_array($row->package_key, (array)$settings['spotplayer_visible_packages'], true)) { echo '<label>کلید لایسنس SpotPlayer</label><textarea readonly style="width:100%;min-height:90px;direction:ltr">' . esc_textarea($row->license_key) . '</textarea>'; }
                 elseif ('unknown' === $row->license_status) { echo '<p>صدور لایسنس نیازمند بررسی پشتیبانی است.</p>'; }
                 if ('complete' === $row->package_key) {
                     $resources = DietUp_Private_Files::resources();
@@ -119,6 +129,7 @@ final class DietUp_Plugin {
                 }
                 if ($telegram) { echo '<p><a href="' . esc_url($telegram) . '" target="_blank" rel="noopener noreferrer">ورود به کانال / گروه تلگرام دوره</a></p>'; }
             }
+            DietUp_Verification::render_account_section($row);
             echo '</section>';
         }
         echo '</div>';
@@ -157,7 +168,7 @@ final class DietUp_Plugin {
             echo '<div class="dietup-notice error">ثبت اطلاعات انجام نشد. لطفاً اطلاعات را بررسی و دوباره تلاش کنید.</div>';
         }
         ?>
-        <form class="dietup-form" method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+        <form class="dietup-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <input type="hidden" name="action" value="dietup_register">
             <?php wp_nonce_field('dietup_register', 'dietup_nonce'); ?>
             <h2>فرم ثبت‌نام دوره آمپول‌های لاغری | دایت‌آپ</h2>
@@ -175,6 +186,18 @@ final class DietUp_Plugin {
                     <option value="<?php echo esc_attr($v); ?>"><?php echo esc_html($v); ?></option><?php endforeach; ?>
                     </select>
                 </label>
+                <label data-dietup-specialist hidden>تخصص پزشکی *
+                    <select name="specialty"><option value="">انتخاب تخصص</option>
+                    <?php foreach (array('متخصص تغذیه','متخصص داخلی','متخصص غدد','متخصص قلب','متخصص کودکان','متخصص جراحی','متخصص پوست','سایر تخصص‌ها') as $specialty_option) : ?>
+                    <option value="<?php echo esc_attr($specialty_option); ?>"><?php echo esc_html($specialty_option); ?></option><?php endforeach; ?>
+                    </select>
+                </label>
+                <label data-dietup-specialty-text hidden>رشته / گرایش تحصیلی *
+                    <input name="specialty_text" type="text" maxlength="190" placeholder="رشته یا گرایش تحصیلی">
+                </label>
+                <label data-dietup-specialty-other hidden>عنوان تخصص (سایر) *
+                    <input name="specialty_custom" type="text" maxlength="190">
+                </label>
                 <label>محل فعالیت *
                     <select name="workplace" data-dietup-workplace required><option value="">انتخاب کنید</option>
                     <?php foreach (array('مطب','کلینیک','بیمارستان','داروخانه','مرکز مشاوره تغذیه','دانشگاه','هنوز دانشجو هستم','سایر') as $v) : ?>
@@ -182,6 +205,10 @@ final class DietUp_Plugin {
                     </select>
                 </label>
                 <label data-dietup-other hidden>توضیحات محل فعالیت<input name="workplace_other" type="text" maxlength="190"></label>
+                <label class="dietup-document-upload">بارگذاری مدرک تحصیلی یا تخصصی *
+                    <input type="file" name="dietup_documents[]" accept=".pdf,.jpg,.jpeg,.png" multiple required>
+                    <small>حداکثر ۵ فایل PDF یا تصویر JPG/PNG؛ حداکثر ۵ مگابایت برای هر فایل.</small>
+                </label>
             </fieldset>
             <fieldset><legend>انتخاب پکیج</legend><div class="dietup-packages">
             <?php foreach ($this->packages() as $key => $package) : ?>
@@ -235,6 +262,10 @@ final class DietUp_Plugin {
         $email = sanitize_email($get('email'));
         $university = $get('university');
         $profession = $get('profession');
+        $specialty = $get('specialty');
+        $specialty_text = $get('specialty_text');
+        $specialty_custom = $get('specialty_custom');
+        $specialty_value = ('پزشک متخصص' === $profession) ? ('سایر تخصص‌ها' === $specialty ? $specialty_custom : $specialty) : $specialty_text;
         $workplace = $get('workplace');
         $package_key = sanitize_key($get('package_key'));
         $age_raw = $get('age');
@@ -246,7 +277,11 @@ final class DietUp_Plugin {
         $valid_workplaces = array('مطب','کلینیک','بیمارستان','داروخانه','مرکز مشاوره تغذیه','دانشگاه','هنوز دانشجو هستم','سایر');
         $needs_certificate = in_array($package_key, array('certificate','complete'), true);
         if (!$full_name || !preg_match('/^09[0-9]{9}$/', $mobile) || !is_email($email) || !$university ||
-            !in_array($profession, $valid_professions, true) || !in_array($workplace, $valid_workplaces, true) ||
+            !in_array($profession, $valid_professions, true) || '' === $specialty_value ||
+            ('پزشک متخصص' === $profession && !in_array($specialty, array('متخصص تغذیه','متخصص داخلی','متخصص غدد','متخصص قلب','متخصص کودکان','متخصص جراحی','متخصص پوست','سایر تخصص‌ها'), true)) ||
+            ('پزشک متخصص' !== $profession && !$specialty_text) ||
+            ('پزشک متخصص' === $profession && 'سایر تخصص‌ها' === $specialty && !$specialty_custom) ||
+            !in_array($workplace, $valid_workplaces, true) ||
             !isset($packages[$package_key]) || empty($_POST['confirm_info']) || empty($_POST['accept_terms']) ||
             ('سایر' === $workplace && !$other) || ($needs_certificate && (!preg_match('/^[A-Za-z .\'-]{2,190}$/', $certificate_name))) ||
             (null !== $age && ($age < 1 || $age > 120))) {
@@ -256,7 +291,8 @@ final class DietUp_Plugin {
         $p = $packages[$package_key];
         $data = array(
             'full_name' => $full_name, 'mobile' => $mobile, 'email' => $email,
-            'university' => $university, 'profession' => $profession, 'workplace' => $workplace,
+            'university' => $university, 'profession' => $profession, 'specialty' => $specialty_value, 'document_status' => 'pending',
+            'document_rejection_reason' => '', 'certificate_status' => 'not_issued', 'workplace' => $workplace,
             'workplace_other' => ('سایر' === $workplace ? $other : null),
             'package_key' => $package_key, 'package_price' => absint($p['price']),
             'certificate_name' => ($needs_certificate ? $certificate_name : null),
@@ -274,13 +310,20 @@ final class DietUp_Plugin {
         }
         $ok = $wpdb->insert($this->table, $data, $formats);
         if (!$ok) { $this->redirect_status('error'); }
-        $this->start_zibal_payment((int)$wpdb->insert_id, $access_token);
+        $registration_id = (int)$wpdb->insert_id;
+        $documents_result = DietUp_Verification::store_registration_documents($registration_id, $_FILES['dietup_documents'] ?? array());
+        if (is_wp_error($documents_result)) {
+            $wpdb->delete($this->table, array('id' => $registration_id), array('%d'));
+            $this->redirect_status('error');
+        }
+        $this->start_zibal_payment($registration_id, $access_token);
     }
 
     public function admin_menu() {
         add_menu_page('مدیریت دایت‌آپ', 'دایت‌آپ', 'manage_options', 'dietup', array($this, 'admin_page'), 'dashicons-welcome-learn-more', 56);
         add_submenu_page('dietup', 'تنظیمات اتصال‌ها', 'تنظیمات اتصال‌ها', 'manage_options', 'dietup-settings', array($this, 'settings_page'));
         add_submenu_page('dietup', 'فایل‌های پکیج کامل', 'فایل‌های پکیج کامل', 'manage_options', 'dietup-files', array('DietUp_Private_Files', 'render_admin_page'));
+        add_submenu_page('dietup', 'مدارک و گواهی کاربران', 'مدارک و گواهی کاربران', 'manage_options', 'dietup-verification', array('DietUp_Verification', 'render_admin_page'));
     }
 
     /**
@@ -299,6 +342,7 @@ final class DietUp_Plugin {
             'spotplayer_api_url' => '',
             'spotplayer_api_key' => '',
             'spotplayer_course_id' => '',
+            'spotplayer_visible_packages' => array('online','certificate','complete'),
         ));
     }
 
@@ -319,6 +363,11 @@ final class DietUp_Plugin {
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_spotplayer_api_key">API Key</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_spotplayer_api_key" name="spotplayer_api_key" value="" placeholder="'.($s['spotplayer_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'SpotPlayer API Key').'"><p class="description">کلید فعلی نمایش داده نمی‌شود.</p>'.($s['spotplayer_api_key'] ? '<label><input type="checkbox" name="clear_spotplayer_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
         echo '<tr><th><label for="dietup_spotplayer_course_id">شناسه دوره / Course ID</label></th><td><input class="regular-text" id="dietup_spotplayer_course_id" name="spotplayer_course_id" value="'.esc_attr($s['spotplayer_course_id']).'"></td></tr>';
+        echo '<tr><th>نمایش کد لایسنس در پنل کاربر</th><td>';
+        foreach (array('online'=>'پکیج آنلاین','certificate'=>'پکیج آنلاین + گواهی','complete'=>'پکیج کامل') as $package_key=>$package_label) {
+            echo '<label style="display:inline-block;margin:0 0 8px 0"><input type="checkbox" name="spotplayer_visible_packages[]" value="'.esc_attr($package_key).'" '.checked(in_array($package_key, (array)$s['spotplayer_visible_packages'], true), true, false).'> '.esc_html($package_label).'</label><br>';
+        }
+        echo '<p class="description">این گزینه فقط نمایش کلید لایسنس صادرشده را کنترل می‌کند و در صدور لایسنس یا پرداخت تغییری ایجاد نمی‌کند.</p></td></tr>';
         echo '</tbody></table>';
         echo '<p class="submit"><button type="submit" class="button button-primary">ذخیره تنظیمات اتصال</button></p></form></div>';
     }
@@ -340,6 +389,8 @@ final class DietUp_Plugin {
             $new[$field] = ('' === $raw || 'https' === wp_parse_url($raw, PHP_URL_SCHEME)) ? $raw : '';
         }
         $new['gateway_sandbox'] = isset($_POST['gateway_sandbox']) ? 1 : 0;
+        $visible_packages = isset($_POST['spotplayer_visible_packages']) && is_array($_POST['spotplayer_visible_packages']) ? array_map('sanitize_key', wp_unslash($_POST['spotplayer_visible_packages'])) : array();
+        $new['spotplayer_visible_packages'] = array_values(array_intersect(array('online','certificate','complete'), $visible_packages));
         foreach (array('spotplayer_api_key') as $secret) {
             if (!empty($_POST['clear_'.$secret])) {
                 $new[$secret] = '';
