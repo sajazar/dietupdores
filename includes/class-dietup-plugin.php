@@ -98,7 +98,7 @@ final class DietUp_Plugin {
         if (!is_user_logged_in()) { echo '<p>برای مشاهده ثبت‌نام‌های دایت‌آپ ابتدا وارد حساب کاربری شوید.</p>'; return; }
         global $wpdb;
         $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$this->table} WHERE user_id = %d ORDER BY id DESC LIMIT 100", get_current_user_id()));
-        $telegram = get_option('dietup_telegram_url', '');
+        $telegram = $this->get_settings()['telegram_url'];
         echo '<div class="dietup-account-courses" dir="rtl"><h2>دوره‌های دایت‌آپ من</h2>';
         if (!$rows) { echo '<p>هنوز ثبت‌نامی به حساب کاربری شما متصل نشده است.</p></div>'; return; }
         foreach ($rows as $row) {
@@ -295,6 +295,7 @@ final class DietUp_Plugin {
             'gateway_payment_url' => 'https://gateway.zibal.ir/v1/request',
             'gateway_verify_url' => 'https://gateway.zibal.ir/v1/verify',
             'gateway_sandbox' => 1,
+            'telegram_url' => '',
             'spotplayer_api_url' => '',
             'spotplayer_api_key' => '',
             'spotplayer_course_id' => '',
@@ -314,7 +315,7 @@ final class DietUp_Plugin {
         wp_nonce_field('dietup_save_settings', 'dietup_settings_nonce');
         echo '<h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
-        echo '<tr><th><label for="dietup_telegram_url">لینک تلگرام دوره</label></th><td><input class="regular-text" type="url" id="dietup_telegram_url" name="telegram_url" value="' . esc_attr(get_option('dietup_telegram_url', '')) . '" placeholder="https://t.me/..."><p class="description">این لینک در پنل ثبت‌نام‌کنندگان پرداخت‌شده نمایش داده می‌شود.</p></td></tr>';
+        echo '<tr><th><label for="dietup_telegram_url">لینک تلگرام دوره</label></th><td><input class="regular-text" type="url" id="dietup_telegram_url" name="telegram_url" value="' . esc_attr($s['telegram_url']) . '" placeholder="https://t.me/..."><p class="description">این لینک در پنل ثبت‌نام‌کنندگان پرداخت‌شده نمایش داده می‌شود.</p></td></tr>';
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_spotplayer_api_key">API Key</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_spotplayer_api_key" name="spotplayer_api_key" value="" placeholder="'.($s['spotplayer_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'SpotPlayer API Key').'"><p class="description">کلید فعلی نمایش داده نمی‌شود.</p>'.($s['spotplayer_api_key'] ? '<label><input type="checkbox" name="clear_spotplayer_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
         echo '<tr><th><label for="dietup_spotplayer_course_id">شناسه دوره / Course ID</label></th><td><input class="regular-text" id="dietup_spotplayer_course_id" name="spotplayer_course_id" value="'.esc_attr($s['spotplayer_course_id']).'"></td></tr>';
@@ -347,7 +348,6 @@ final class DietUp_Plugin {
             }
         }
         update_option('dietup_integration_settings', $new, false);
-        update_option('dietup_telegram_url', isset($new['telegram_url']) ? $new['telegram_url'] : '', false);
         wp_safe_redirect(add_query_arg(array('page'=>'dietup-settings','settings_saved'=>'1'), admin_url('admin.php')));
         exit;
     }
