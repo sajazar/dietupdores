@@ -21,4 +21,19 @@
         });
         refresh();
     });
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('.dietup-copy-license');
+        if (!button) return;
+        var field = document.getElementById(button.dataset.target);
+        if (!field) return;
+        field.focus();
+        field.select();
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(field.value).then(function () {
+                button.textContent = 'کپی شد';
+            });
+        } else {
+            try { document.execCommand('copy'); button.textContent = 'کپی شد'; } catch (e) {}
+        }
+    });
 }());
