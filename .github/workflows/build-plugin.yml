@@ -1,7 +1,7 @@
 name: Build DietUp plugin
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 'feature/**']
   workflow_dispatch:
 permissions:
   contents: read
