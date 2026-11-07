@@ -141,8 +141,9 @@ final class DietUp_Verification {
             }
             $stored_rows[] = $stored;
         }
+        $inserted_ids = array();
         foreach ($stored_rows as $row) {
-            $wpdb->insert(self::documents_table(), array(
+            $inserted = $wpdb->insert(self::documents_table(), array(
                 'registration_id' => absint($registration_id),
                 'document_type' => 'qualification',
                 'original_filename' => $row['original_filename'],
@@ -153,8 +154,17 @@ final class DietUp_Verification {
                 'uploaded_at' => current_time('mysql'),
                 'uploaded_by' => get_current_user_id(),
             ), array('%d','%s','%s','%s','%s','%s','%d','%s','%d'));
+            if (!$inserted) {
+                foreach ($stored_rows as $cleanup) { self::delete_file_path($cleanup['storage_path']); }
+                if ($inserted_ids) {
+                    $ids = implode(',', array_map('absint', $inserted_ids));
+                    $wpdb->query("DELETE FROM ".self::documents_table()." WHERE id IN ({$ids})");
+                }
+                return new WP_Error('dietup_document_db', 'ذخیره اطلاعات مدارک در پایگاه داده ناموفق بود.');
+            }
+            $inserted_ids[] = (int)$wpdb->insert_id;
         }
-        return true;
+        return $inserted_ids;
     }
 
     private static function delete_file_path($path) {
@@ -244,14 +254,20 @@ final class DietUp_Verification {
         $stored = self::validate_and_store($_FILES['dietup_certificate'] ?? array());
         if (is_wp_error($stored)) { wp_die(esc_html($stored->get_error_message())); }
         global $wpdb;
-        self::delete_documents($id, 'certificate');
-        $wpdb->insert(self::documents_table(), array(
+        $inserted = $wpdb->insert(self::documents_table(), array(
             'registration_id'=>$id, 'document_type'=>'certificate',
             'original_filename'=>$stored['original_filename'], 'stored_filename'=>$stored['stored_filename'],
             'storage_path'=>$stored['storage_path'], 'mime_type'=>$stored['mime_type'],
             'file_size'=>$stored['file_size'], 'uploaded_at'=>current_time('mysql'),
             'uploaded_by'=>get_current_user_id(),
         ), array('%d','%s','%s','%s','%s','%s','%d','%s','%d'));
+        if (!$inserted) { self::delete_file_path($stored['storage_path']); wp_die('ذخیره گواهی ناموفق بود.'); }
+        $new_id = (int)$wpdb->insert_id;
+        $old_rows = $wpdb->get_results($wpdb->prepare("SELECT id,storage_path FROM ".self::documents_table()." WHERE registration_id=%d AND document_type='certificate' AND id<>%d", $id, $new_id));
+        foreach ($old_rows as $old_row) {
+            self::delete_file_path($old_row->storage_path);
+            $wpdb->delete(self::documents_table(), array('id'=>(int)$old_row->id), array('%d'));
+        }
         $wpdb->update($wpdb->prefix.'dietup_registrations', array('certificate_status'=>'available','certificate_uploaded_at'=>current_time('mysql')), array('id'=>$id), array('%s','%s'), array('%d'));
         wp_safe_redirect(admin_url('admin.php?page=dietup-verification&certificate=uploaded')); exit;
     }
@@ -278,9 +294,8 @@ final class DietUp_Verification {
         if (!$normalized || count($normalized)>5) { wp_die('حداقل یک و حداکثر پنج فایل انتخاب کنید.'); }
         $result = self::store_registration_documents($id, $_FILES['dietup_documents']);
         if (is_wp_error($result)) { wp_die(esc_html($result->get_error_message())); }
-        // New files are stored successfully; now remove the previous set.
-        $new_rows = $wpdb->get_results($wpdb->prepare("SELECT id FROM ".self::documents_table()." WHERE registration_id=%d AND document_type='qualification' ORDER BY id DESC LIMIT 5", $id));
-        $keep_ids = array_map('intval', wp_list_pluck($new_rows, 'id'));
+        // Keep the newly uploaded set and remove only the previous files.
+        $keep_ids = array_map('intval', $result);
         $all_rows = $wpdb->get_results($wpdb->prepare("SELECT id,storage_path FROM ".self::documents_table()." WHERE registration_id=%d AND document_type='qualification'", $id));
         foreach ($all_rows as $old_row) {
             if (!in_array((int)$old_row->id, $keep_ids, true)) {
