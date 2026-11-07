@@ -22,6 +22,11 @@ trait DietUp_Zibal_Trait {
         if (!$track_id || !ctype_digit($track_id)) { wp_die('شناسه تراکنش نامعتبر است.'); }
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE payment_authority = %s LIMIT 1", $track_id));
         if (!$row) { wp_die('ثبت‌نام مرتبط با این تراکنش پیدا نشد.'); }
+        $access_token = isset($_GET['dietup_access']) ? sanitize_text_field(wp_unslash($_GET['dietup_access'])) : '';
+        if (!$access_token || !preg_match('/^[a-f0-9]{64}$/', $access_token) ||
+            !hash_equals((string)$row->access_token_hash, hash('sha256', $access_token))) {
+            wp_die('نشانی بازگشت معتبر نیست.');
+        }
 
         if ('paid' !== $row->payment_status) {
             $verified = DietUp_Integrations::zibal_verify($track_id);
