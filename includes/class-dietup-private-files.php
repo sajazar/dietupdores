@@ -13,6 +13,7 @@ final class DietUp_Private_Files {
         add_action('admin_post_dietup_delete_resource', array(__CLASS__, 'handle_delete'));
         add_action('admin_post_dietup_download_resource', array(__CLASS__, 'handle_download'));
         add_action('admin_post_nopriv_dietup_download_resource', array(__CLASS__, 'handle_download'));
+        add_action('admin_post_dietup_account_download', array(__CLASS__, 'handle_account_download'));
     }
 
     private static function storage_dir() {
@@ -63,6 +64,11 @@ final class DietUp_Private_Files {
             'type' => $type,
             'dietup_access' => $token,
         ), admin_url('admin-post.php'));
+    }
+
+    public static function account_download_url($registration_id, $type) {
+        $url = add_query_arg(array('action' => 'dietup_account_download', 'registration_id' => absint($registration_id), 'type' => sanitize_key($type)), admin_url('admin-post.php'));
+        return wp_nonce_url($url, 'dietup_account_download_' . absint($registration_id) . '_' . sanitize_key($type));
     }
 
     public static function render_admin_page() {
@@ -179,6 +185,34 @@ final class DietUp_Private_Files {
         unset($resources[$type]);
         update_option(self::OPTION, $resources, false);
         wp_safe_redirect(add_query_arg(array('page' => 'dietup-files', 'dietup_file_status' => 'deleted'), admin_url('admin.php')));
+        exit;
+    }
+
+    public static function handle_account_download() {
+        if (!is_user_logged_in()) { auth_redirect(); }
+        $id = isset($_GET['registration_id']) ? absint($_GET['registration_id']) : 0;
+        $type = isset($_GET['type']) ? sanitize_key(wp_unslash($_GET['type'])) : '';
+        if (!$id || !in_array($type, array('video', 'booklet'), true) || !wp_verify_nonce(isset($_GET['_wpnonce']) ? sanitize_text_field(wp_unslash($_GET['_wpnonce'])) : '', 'dietup_account_download_' . $id . '_' . $type)) {
+            status_header(404); exit;
+        }
+        global $wpdb;
+        $table = $wpdb->prefix . 'dietup_registrations';
+        $row = $wpdb->get_row($wpdb->prepare("SELECT user_id, package_key, payment_status FROM {$table} WHERE id = %d LIMIT 1", $id));
+        if (!$row || (int)$row->user_id !== get_current_user_id() || 'paid' !== $row->payment_status || 'complete' !== $row->package_key) {
+            status_header(403); exit;
+        }
+        $resources = self::resources();
+        if (empty($resources[$type]['path']) || !is_file($resources[$type]['path'])) { status_header(404); exit; }
+        $base = realpath(self::storage_dir());
+        $path = realpath($resources[$type]['path']);
+        if (!$base || !$path || 0 !== strpos($path, trailingslashit($base)) || !is_readable($path)) { status_header(404); exit; }
+        $filename = sanitize_file_name($resources[$type]['name'] ?? basename($path));
+        nocache_headers();
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Type: ' . ('video' === $type ? 'video/mp4' : 'application/pdf'));
+        header('Content-Length: ' . (string)filesize($path));
+        header('Content-Disposition: attachment; filename="download.' . ('video' === $type ? 'mp4' : 'pdf') . '"; filename*=UTF-8\\'\\'' . rawurlencode($filename));
+        readfile($path);
         exit;
     }
 
