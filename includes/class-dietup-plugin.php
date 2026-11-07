@@ -244,12 +244,9 @@ final class DietUp_Plugin {
         echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">';
         echo '<input type="hidden" name="action" value="dietup_save_settings">';
         wp_nonce_field('dietup_save_settings', 'dietup_settings_nonce');
-        echo '<h2>درگاه پرداخت</h2><table class="form-table"><tbody>';
+        echo '<h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_name">نام درگاه / ارائه‌دهنده</label></th><td><input class="regular-text" id="dietup_gateway_name" name="gateway_name" value="'.esc_attr($s['gateway_name']).'" placeholder="مثلاً نام شرکت ارائه‌دهنده درگاه"></td></tr>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
-        echo '<tr><th><label for="dietup_gateway_api_key">API Key / کلید محرمانه درگاه</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_gateway_api_key" name="gateway_api_key" value="" placeholder="'.($s['gateway_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'کلید محرمانه درگاه').'"><p class="description">کلید فعلی نمایش داده نمی‌شود. برای جایگزینی، مقدار جدید را وارد کنید.</p>'.($s['gateway_api_key'] ? '<label><input type="checkbox" name="clear_gateway_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
-        echo '<tr><th><label for="dietup_gateway_payment_url">آدرس درخواست پرداخت</label></th><td><input class="large-text" type="url" id="dietup_gateway_payment_url" name="gateway_payment_url" value="'.esc_attr($s['gateway_payment_url']).'" placeholder="https://..."></td></tr>';
-        echo '<tr><th><label for="dietup_gateway_verify_url">آدرس تأیید پرداخت (Verify)</label></th><td><input class="large-text" type="url" id="dietup_gateway_verify_url" name="gateway_verify_url" value="'.esc_attr($s['gateway_verify_url']).'" placeholder="https://..."></td></tr>';
         echo '<tr><th>حالت آزمایشی</th><td><label><input type="checkbox" name="gateway_sandbox" value="1" '.checked((int)$s['gateway_sandbox'],1,false).'> درگاه در حالت Sandbox / آزمایشی باشد</label></td></tr>';
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_spotplayer_api_url">آدرس API</label></th><td><input class="large-text" type="url" id="dietup_spotplayer_api_url" name="spotplayer_api_url" value="'.esc_attr($s['spotplayer_api_url']).'" placeholder="آدرس پایه API طبق مستندات رسمی"></td></tr>';
@@ -276,7 +273,7 @@ final class DietUp_Plugin {
             $new[$field] = ('' === $raw || 'https' === wp_parse_url($raw, PHP_URL_SCHEME)) ? $raw : '';
         }
         $new['gateway_sandbox'] = isset($_POST['gateway_sandbox']) ? 1 : 0;
-        foreach (array('gateway_api_key','spotplayer_api_key') as $secret) {
+        foreach (array('spotplayer_api_key') as $secret) {
             if (!empty($_POST['clear_'.$secret])) {
                 $new[$secret] = '';
             } elseif (isset($_POST[$secret]) && '' !== trim((string)wp_unslash($_POST[$secret]))) {
