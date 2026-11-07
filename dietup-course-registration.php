@@ -19,6 +19,10 @@ require_once DIETUP_PATH . 'includes/class-dietup-integrations.php';
 require_once DIETUP_PATH . 'includes/class-dietup-private-files.php';
 require_once DIETUP_PATH . 'includes/trait-dietup-zibal.php';
 require_once DIETUP_PATH . 'includes/class-dietup-plugin.php';
+require_once DIETUP_PATH . 'includes/class-dietup-user-accounts.php';
 
 register_activation_hook(__FILE__, array('DietUp_Plugin', 'activate'));
 add_action('plugins_loaded', array('DietUp_Plugin', 'instance'));
+
+// Apply the account-aware layer after the legacy plugin has registered its hooks.
+add_action('plugins_loaded', array('DietUp_User_Accounts', 'boot'), 20);
