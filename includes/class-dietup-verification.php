@@ -44,7 +44,17 @@ final class DietUp_Verification {
     }
 
     private static function storage_dir() {
-        return untrailingslashit(dirname(rtrim(ABSPATH, '/\\')) . DIRECTORY_SEPARATOR . 'dietup-private');
+        $document_root = isset($_SERVER['DOCUMENT_ROOT']) ? realpath(wp_unslash($_SERVER['DOCUMENT_ROOT'])) : false;
+        $candidate = dirname(rtrim(ABSPATH, '/\\')) . DIRECTORY_SEPARATOR . 'dietup-private';
+        $candidate_parent = realpath(dirname($candidate));
+        if ($document_root && $candidate_parent) {
+            $doc = trailingslashit(wp_normalize_path($document_root));
+            $parent = trailingslashit(wp_normalize_path($candidate_parent));
+            if (0 === strpos($parent, $doc)) {
+                $candidate = dirname($document_root) . DIRECTORY_SEPARATOR . 'dietup-private-' . substr(hash('sha256', ABSPATH), 0, 10);
+            }
+        }
+        return untrailingslashit($candidate);
     }
 
     private static function ensure_storage() {
@@ -238,6 +248,8 @@ final class DietUp_Verification {
         $reason = sanitize_textarea_field(wp_unslash($_POST['rejection_reason'] ?? ''));
         if (in_array($status, array('rejected','needs_revision'), true) && '' === $reason) { wp_die('برای رد یا درخواست اصلاح، ثبت دلیل الزامی است.'); }
         global $wpdb;
+        $document_count = (int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM ".self::documents_table()." WHERE registration_id=%d AND document_type='qualification'", $id));
+        if (!$document_count) { wp_die('برای این ثبت‌نام مدرک قابل بررسی ثبت نشده است.'); }
         $wpdb->update($wpdb->prefix.'dietup_registrations', array(
             'document_status'=>$status,
             'document_rejection_reason'=>in_array($status,array('rejected','needs_revision'),true) ? $reason : '',
@@ -251,9 +263,11 @@ final class DietUp_Verification {
         if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
         $id = absint($_POST['registration_id'] ?? 0);
         if (!$id || !isset($_POST['dietup_certificate_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_certificate_nonce'])), 'dietup_upload_certificate_'.$id)) { wp_die('درخواست نامعتبر است.'); }
+        global $wpdb;
+        $registrations_table = $wpdb->prefix.'dietup_registrations';
+        if (!$wpdb->get_var($wpdb->prepare("SELECT id FROM {$registrations_table} WHERE id=%d", $id))) { wp_die('ثبت‌نام موردنظر پیدا نشد.'); }
         $stored = self::validate_and_store($_FILES['dietup_certificate'] ?? array());
         if (is_wp_error($stored)) { wp_die(esc_html($stored->get_error_message())); }
-        global $wpdb;
         $inserted = $wpdb->insert(self::documents_table(), array(
             'registration_id'=>$id, 'document_type'=>'certificate',
             'original_filename'=>$stored['original_filename'], 'stored_filename'=>$stored['stored_filename'],
@@ -276,8 +290,9 @@ final class DietUp_Verification {
         if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
         $id = absint($_POST['registration_id'] ?? 0);
         if (!$id || !isset($_POST['dietup_delete_certificate_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_delete_certificate_nonce'])), 'dietup_delete_certificate_'.$id)) { wp_die('درخواست نامعتبر است.'); }
-        self::delete_documents($id, 'certificate');
         global $wpdb;
+        if (!$wpdb->get_var($wpdb->prepare("SELECT id FROM ".$wpdb->prefix."dietup_registrations WHERE id=%d", $id))) { wp_die('ثبت‌نام موردنظر پیدا نشد.'); }
+        self::delete_documents($id, 'certificate');
         $wpdb->update($wpdb->prefix.'dietup_registrations', array('certificate_status'=>'not_issued','certificate_uploaded_at'=>null), array('id'=>$id), array('%s','%s'), array('%d'));
         wp_safe_redirect(admin_url('admin.php?page=dietup-verification&certificate=deleted')); exit;
     }
