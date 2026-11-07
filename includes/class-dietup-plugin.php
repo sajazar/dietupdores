@@ -539,7 +539,7 @@ final class DietUp_Plugin {
             );
             $sheet .= '<row r="' . $row_number . '">';
             foreach ($values as $i => $value) {
-                $numeric = in_array($i, array(0, 5, 10), true);
+                $numeric = in_array($i, array(0, 5, 11), true);
                 $sheet .= $this->xlsx_cell_xml($value, $this->xlsx_column_name($i + 1), $row_number, $numeric);
             }
             $sheet .= '</row>';
