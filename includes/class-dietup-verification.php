@@ -10,6 +10,11 @@ final class DietUp_Verification {
         return $wpdb->prefix . 'dietup_documents';
     }
 
+    private static function reviews_table() {
+        global $wpdb;
+        return $wpdb->prefix . 'dietup_document_reviews';
+    }
+
     public static function install() {
         global $wpdb;
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -32,6 +37,19 @@ final class DietUp_Verification {
             KEY uploaded_at (uploaded_at)
         ) {$charset};";
         dbDelta($sql);
+        $reviews = self::reviews_table();
+        $review_sql = "CREATE TABLE {$reviews} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            registration_id bigint(20) unsigned NOT NULL,
+            document_status varchar(30) NOT NULL,
+            rejection_reason text NULL,
+            reviewed_by bigint(20) unsigned NOT NULL DEFAULT 0,
+            reviewed_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            KEY registration_id (registration_id),
+            KEY reviewed_at (reviewed_at)
+        ) {$charset};";
+        dbDelta($review_sql);
     }
 
     public static function init() {
@@ -220,6 +238,15 @@ final class DietUp_Verification {
             }
             echo '</select> <input type="text" name="rejection_reason" class="regular-text" value="'.esc_attr($row->document_rejection_reason ?? '').'" placeholder="دلیل رد یا درخواست اصلاح مدرک">';
             echo ' <button class="button">ذخیره وضعیت بررسی</button></form>';
+            $history = $wpdb->get_results($wpdb->prepare("SELECT * FROM ".self::reviews_table()." WHERE registration_id=%d ORDER BY id DESC LIMIT 10", $row->id));
+            if ($history) {
+                echo '<details><summary>تاریخچه بررسی مدارک</summary><ul>';
+                foreach ($history as $entry) {
+                    $reviewer = get_userdata((int)$entry->reviewed_by);
+                    echo '<li>'.esc_html($entry->reviewed_at).' — '.esc_html($entry->document_status).' — '.esc_html($reviewer ? $reviewer->display_name : 'مدیر').' — '.esc_html($entry->rejection_reason ?? '').'</li>';
+                }
+                echo '</ul></details>';
+            }
             echo '<hr><h3>گواهی اختصاصی</h3>';
             if (in_array($row->package_key, array('certificate','complete'), true)) {
                 if ($cert) {
@@ -255,12 +282,20 @@ final class DietUp_Verification {
         global $wpdb;
         $document_count = (int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM ".self::documents_table()." WHERE registration_id=%d AND document_type='qualification'", $id));
         if (!$document_count) { wp_die('برای این ثبت‌نام مدرک قابل بررسی ثبت نشده است.'); }
+        $reviewed_at = current_time('mysql');
         $wpdb->update($wpdb->prefix.'dietup_registrations', array(
             'document_status'=>$status,
             'document_rejection_reason'=>in_array($status,array('rejected','needs_revision'),true) ? $reason : '',
-            'document_reviewed_at'=>current_time('mysql'),
+            'document_reviewed_at'=>$reviewed_at,
             'document_reviewed_by'=>get_current_user_id(),
         ), array('id'=>$id), array('%s','%s','%s','%d'), array('%d'));
+        $wpdb->insert(self::reviews_table(), array(
+            'registration_id'=>$id,
+            'document_status'=>$status,
+            'rejection_reason'=>in_array($status,array('rejected','needs_revision'),true) ? $reason : '',
+            'reviewed_by'=>get_current_user_id(),
+            'reviewed_at'=>$reviewed_at,
+        ), array('%d','%s','%s','%d','%s'));
         wp_safe_redirect(admin_url('admin.php?page=dietup-verification&updated=1')); exit;
     }
 
