@@ -127,9 +127,17 @@ final class DietUp_Private_Files {
         $original = sanitize_file_name(wp_unslash($file['name']));
         $extension = strtolower(pathinfo($original, PATHINFO_EXTENSION));
         if (!isset($allowed[$extension])) { wp_die('فرمت فایل مجاز نیست.'); }
-        $mime = function_exists('finfo_open') ? finfo_file(finfo_open(FILEINFO_MIME_TYPE), $file['tmp_name']) : '';
-        $valid_mimes = ('video' === $type) ? array('video/mp4', 'application/mp4', 'application/octet-stream') : array('application/pdf', 'application/x-pdf');
-        if ($mime && !in_array($mime, $valid_mimes, true)) { wp_die('نوع واقعی فایل با پسوند آن مطابقت ندارد.'); }
+        if ((int)$file['size'] < 1) { wp_die('فایل انتخاب‌شده خالی است.'); }
+        $mime = '';
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $mime = finfo_file($finfo, $file['tmp_name']);
+                finfo_close($finfo);
+            }
+        }
+        $valid_mimes = ('video' === $type) ? array('video/mp4', 'application/mp4') : array('application/pdf', 'application/x-pdf');
+        if (!$mime || !in_array($mime, $valid_mimes, true)) { wp_die('نوع واقعی فایل با پسوند آن مطابقت ندارد یا بررسی MIME روی هاست در دسترس نیست.'); }
 
         $dir = self::ensure_storage();
         if (is_wp_error($dir)) { wp_die(esc_html($dir->get_error_message())); }
