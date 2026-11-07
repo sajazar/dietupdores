@@ -1,0 +1,30 @@
+name: Build DietUp plugin
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+      - name: PHP syntax check
+        run: |
+          find . -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Package plugin
+        run: |
+          mkdir -p dist/dietup-course-registration
+          rsync -a --exclude='.git' --exclude='dist' --exclude='.github' ./ dist/dietup-course-registration/
+          cd dist
+          zip -r dietup-course-registration.zip dietup-course-registration
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dietup-course-registration
+          path: dist/dietup-course-registration.zip
+          if-no-files-found: error
+          retention-days: 30
