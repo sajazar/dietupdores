@@ -14,6 +14,7 @@ final class DietUp_Plugin {
     private function __construct() {
         global $wpdb;
         $this->table = $wpdb->prefix . 'dietup_registrations';
+        DietUp_Private_Files::init();
         if (get_option('dietup_db_version') !== DIETUP_VERSION) { self::activate(); }
         add_shortcode('dietup_registration', array($this, 'render_shortcode'));
         add_action('wp_enqueue_scripts', array($this, 'assets'));
@@ -213,6 +214,7 @@ final class DietUp_Plugin {
     public function admin_menu() {
         add_menu_page('مدیریت دایت‌آپ', 'دایت‌آپ', 'manage_options', 'dietup', array($this, 'admin_page'), 'dashicons-welcome-learn-more', 56);
         add_submenu_page('dietup', 'تنظیمات اتصال‌ها', 'تنظیمات اتصال‌ها', 'manage_options', 'dietup-settings', array($this, 'settings_page'));
+        add_submenu_page('dietup', 'فایل‌های پکیج کامل', 'فایل‌های پکیج کامل', 'manage_options', 'dietup-files', array('DietUp_Private_Files', 'render_admin_page'));
     }
 
     /**
