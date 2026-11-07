@@ -72,7 +72,7 @@ final class DietUp_User_Accounts {
             if (preg_match('/^[a-f0-9]{64}$/', $token)) {
                 global $wpdb;
                 $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM " . self::$table . " WHERE access_token_hash = %s LIMIT 1", hash('sha256', $token)));
-                if ($row && 'paid' === $row->payment_status && (int)$row->user_id === get_current_user_id()) {
+                if ($row && 'paid' === $row->payment_status) {
                     return '<div class="dietup-wrap">' . self::result_markup($row, $token) . '</div>';
                 }
             }
