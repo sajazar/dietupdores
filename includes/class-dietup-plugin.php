@@ -245,11 +245,8 @@ final class DietUp_Plugin {
         echo '<input type="hidden" name="action" value="dietup_save_settings">';
         wp_nonce_field('dietup_save_settings', 'dietup_settings_nonce');
         echo '<h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
-        echo '<tr><th><label for="dietup_gateway_name">نام درگاه / ارائه‌دهنده</label></th><td><input class="regular-text" id="dietup_gateway_name" name="gateway_name" value="'.esc_attr($s['gateway_name']).'" placeholder="مثلاً نام شرکت ارائه‌دهنده درگاه"></td></tr>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
-        echo '<tr><th>حالت آزمایشی</th><td><label><input type="checkbox" name="gateway_sandbox" value="1" '.checked((int)$s['gateway_sandbox'],1,false).'> درگاه در حالت Sandbox / آزمایشی باشد</label></td></tr>';
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
-        echo '<tr><th><label for="dietup_spotplayer_api_url">آدرس API</label></th><td><input class="large-text" type="url" id="dietup_spotplayer_api_url" name="spotplayer_api_url" value="'.esc_attr($s['spotplayer_api_url']).'" placeholder="آدرس پایه API طبق مستندات رسمی"></td></tr>';
         echo '<tr><th><label for="dietup_spotplayer_api_key">API Key</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_spotplayer_api_key" name="spotplayer_api_key" value="" placeholder="'.($s['spotplayer_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'SpotPlayer API Key').'"><p class="description">کلید فعلی نمایش داده نمی‌شود.</p>'.($s['spotplayer_api_key'] ? '<label><input type="checkbox" name="clear_spotplayer_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
         echo '<tr><th><label for="dietup_spotplayer_course_id">شناسه دوره / Course ID</label></th><td><input class="regular-text" id="dietup_spotplayer_course_id" name="spotplayer_course_id" value="'.esc_attr($s['spotplayer_course_id']).'"></td></tr>';
         echo '</tbody></table>';
