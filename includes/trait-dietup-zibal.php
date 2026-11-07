@@ -2,6 +2,20 @@
 if (!defined('ABSPATH')) { exit; }
 
 trait DietUp_Zibal_Trait {
+    private function start_zibal_payment($registration_id, $access_token) {
+        global $wpdb;
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $registration_id));
+        if (!$row) { $this->redirect_status('error'); }
+        $payment = DietUp_Integrations::zibal_request($row, $access_token);
+        if (is_wp_error($payment)) {
+            $wpdb->update($this->table, array('payment_status' => 'failed', 'updated_at' => current_time('mysql')), array('id' => $registration_id));
+            $this->redirect_status('error');
+        }
+        $wpdb->update($this->table, array('payment_gateway' => 'zibal', 'payment_authority' => $payment['track_id'], 'updated_at' => current_time('mysql')), array('id' => $registration_id));
+        wp_safe_redirect($payment['url']);
+        exit;
+    }
+
     public function zibal_callback() {
         global $wpdb;
         $track_id = isset($_GET['trackId']) ? sanitize_text_field(wp_unslash($_GET['trackId'])) : '';
@@ -47,7 +61,12 @@ trait DietUp_Zibal_Trait {
                 }
             }
         }
-        wp_safe_redirect(home_url('/?dietup_payment=complete'));
+        $token = isset($_GET['dietup_access']) ? sanitize_text_field(wp_unslash($_GET['dietup_access'])) : '';
+        if ($token && preg_match('/^[a-f0-9]{64}$/', $token)) {
+            wp_safe_redirect(add_query_arg('dietup_access', $token, home_url('/')));
+        } else {
+            wp_safe_redirect(home_url('/'));
+        }
         exit;
     }
 
