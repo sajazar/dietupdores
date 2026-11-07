@@ -27,6 +27,7 @@ final class DietUp_Plugin {
         add_action('admin_post_dietup_register', array($this, 'handle_registration'));
         add_action('admin_post_dietup_export_csv', array($this, 'export_csv'));
         add_action('admin_post_dietup_export_xlsx', array($this, 'export_xlsx'));
+        add_action('admin_post_dietup_retry_license', array($this, 'retry_license'));
     }
 
     public static function activate() {
@@ -321,9 +322,50 @@ final class DietUp_Plugin {
         echo '<button class="button">دریافت فایل Excel (XLSX)</button></form><p>برای جلوگیری از کندی، حداکثر ۵۰۰ رکورد در این فهرست نمایش داده می‌شود.</p>';
         echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th></tr></thead><tbody>';
         if ($rows) { foreach ($rows as $r) {
-            echo '<tr><td>'.esc_html($r->id).'</td><td>'.esc_html($r->full_name).'</td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).'</td><td>'.esc_html($this->payment_label($r->payment_status)).'</td><td>'.esc_html($this->license_label($r->license_status)).'</td><td>'.esc_html($r->created_at).'</td></tr>';
+            echo '<tr><td>'.esc_html($r->id).'</td><td>'.esc_html($r->full_name).'</td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).'</td><td>'.esc_html($this->payment_label($r->payment_status)).'</td><td>'.esc_html($this->license_label($r->license_status));
+            if ('failed' === $r->license_status && 'paid' === $r->payment_status) {
+                echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="dietup_retry_license"><input type="hidden" name="registration_id" value="' . esc_attr($r->id) . '">';
+                wp_nonce_field('dietup_retry_license_' . $r->id, 'dietup_retry_nonce');
+                echo '<button class="button button-small">تلاش مجدد صدور لایسنس</button></form>';
+            }
+            echo '</td><td>'.esc_html($r->created_at).'</td></tr>';
         }} else { echo '<tr><td colspan="12">رکوردی مطابق فیلترها پیدا نشد.</td></tr>'; }
         echo '</tbody></table></div>';
+    }
+
+
+    public function retry_license() {
+        if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
+        $id = isset($_POST['registration_id']) ? absint($_POST['registration_id']) : 0;
+        if (!$id || !isset($_POST['dietup_retry_nonce']) ||
+            !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_retry_nonce'])), 'dietup_retry_license_' . $id)) {
+            wp_die('درخواست نامعتبر است.');
+        }
+        global $wpdb;
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $id));
+        if (!$row || 'paid' !== $row->payment_status || 'failed' !== $row->license_status) {
+            wp_die('این ثبت‌نام واجد شرایط تلاش مجدد امن نیست. وضعیت‌های نامشخص باید ابتدا در پنل SpotPlayer بررسی شوند.');
+        }
+        $claimed = $wpdb->query($wpdb->prepare(
+            "UPDATE {$this->table} SET license_status = 'issuing', updated_at = %s WHERE id = %d AND payment_status = 'paid' AND license_status = 'failed'",
+            current_time('mysql'), $id
+        ));
+        if (1 !== (int)$claimed) { wp_die('این عملیات قبلاً توسط درخواست دیگری انجام شده است.'); }
+        $row->license_status = 'issuing';
+        $license = DietUp_Integrations::spotplayer_license($row);
+        if (is_wp_error($license)) {
+            $state = ('dietup_spot_config' === $license->get_error_code()) ? 'failed' : 'unknown';
+            $wpdb->update($this->table, array('license_status' => $state, 'updated_at' => current_time('mysql')), array('id' => $id));
+        } else {
+            $wpdb->update($this->table, array(
+                'license_status' => 'issued',
+                'license_id' => $license['id'],
+                'license_key' => $license['key'],
+                'updated_at' => current_time('mysql')
+            ), array('id' => $id));
+        }
+        wp_safe_redirect(add_query_arg(array('page' => 'dietup', 'license_retry' => '1'), admin_url('admin.php')));
+        exit;
     }
 
     private function payment_label($s) {
@@ -332,7 +374,7 @@ final class DietUp_Plugin {
     }
 
     private function license_label($s) {
-        $labels = array('not_issued'=>'صادر نشده','pending'=>'در صف صدور','issued'=>'صادر شده','failed'=>'خطا');
+        $labels = array('not_issued'=>'صادر نشده','pending'=>'در صف صدور','issuing'=>'در حال صدور','issued'=>'صادر شده','failed'=>'خطا (قابل تلاش مجدد)','unknown'=>'نیازمند بررسی دستی');
         return $labels[$s] ?? $s;
     }
 
