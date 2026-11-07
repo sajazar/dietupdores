@@ -142,11 +142,17 @@ final class DietUp_Verification {
             $stored_rows[] = $stored;
         }
         foreach ($stored_rows as $row) {
-            $row['registration_id'] = absint($registration_id);
-            $row['document_type'] = 'qualification';
-            $row['uploaded_at'] = current_time('mysql');
-            $row['uploaded_by'] = get_current_user_id();
-            $wpdb->insert(self::documents_table(), $row, array('%s','%s','%s','%s','%s','%s','%d','%d','%s','%d'));
+            $wpdb->insert(self::documents_table(), array(
+                'registration_id' => absint($registration_id),
+                'document_type' => 'qualification',
+                'original_filename' => $row['original_filename'],
+                'stored_filename' => $row['stored_filename'],
+                'storage_path' => $row['storage_path'],
+                'mime_type' => $row['mime_type'],
+                'file_size' => $row['file_size'],
+                'uploaded_at' => current_time('mysql'),
+                'uploaded_by' => get_current_user_id(),
+            ), array('%d','%s','%s','%s','%s','%s','%d','%s','%d'));
         }
         return true;
     }
@@ -239,8 +245,13 @@ final class DietUp_Verification {
         if (is_wp_error($stored)) { wp_die(esc_html($stored->get_error_message())); }
         global $wpdb;
         self::delete_documents($id, 'certificate');
-        $stored['registration_id']=$id; $stored['document_type']='certificate'; $stored['uploaded_at']=current_time('mysql'); $stored['uploaded_by']=get_current_user_id();
-        $wpdb->insert(self::documents_table(), $stored, array('%s','%s','%s','%s','%s','%s','%d','%d','%s','%d'));
+        $wpdb->insert(self::documents_table(), array(
+            'registration_id'=>$id, 'document_type'=>'certificate',
+            'original_filename'=>$stored['original_filename'], 'stored_filename'=>$stored['stored_filename'],
+            'storage_path'=>$stored['storage_path'], 'mime_type'=>$stored['mime_type'],
+            'file_size'=>$stored['file_size'], 'uploaded_at'=>current_time('mysql'),
+            'uploaded_by'=>get_current_user_id(),
+        ), array('%d','%s','%s','%s','%s','%s','%d','%s','%d'));
         $wpdb->update($wpdb->prefix.'dietup_registrations', array('certificate_status'=>'available','certificate_uploaded_at'=>current_time('mysql')), array('id'=>$id), array('%s','%s'), array('%d'));
         wp_safe_redirect(admin_url('admin.php?page=dietup-verification&certificate=uploaded')); exit;
     }
@@ -265,9 +276,18 @@ final class DietUp_Verification {
         if (!$row || (int)$row->user_id !== get_current_user_id() || !in_array($row->document_status, array('rejected','needs_revision'), true)) { wp_die('اجازه انجام این عملیات را ندارید.'); }
         $normalized = self::normalize_files($_FILES['dietup_documents'] ?? array());
         if (!$normalized || count($normalized)>5) { wp_die('حداقل یک و حداکثر پنج فایل انتخاب کنید.'); }
-        self::delete_documents($id, 'qualification');
         $result = self::store_registration_documents($id, $_FILES['dietup_documents']);
         if (is_wp_error($result)) { wp_die(esc_html($result->get_error_message())); }
+        // New files are stored successfully; now remove the previous set.
+        $new_rows = $wpdb->get_results($wpdb->prepare("SELECT id FROM ".self::documents_table()." WHERE registration_id=%d AND document_type='qualification' ORDER BY id DESC LIMIT 5", $id));
+        $keep_ids = array_map('intval', wp_list_pluck($new_rows, 'id'));
+        $all_rows = $wpdb->get_results($wpdb->prepare("SELECT id,storage_path FROM ".self::documents_table()." WHERE registration_id=%d AND document_type='qualification'", $id));
+        foreach ($all_rows as $old_row) {
+            if (!in_array((int)$old_row->id, $keep_ids, true)) {
+                self::delete_file_path($old_row->storage_path);
+                $wpdb->delete(self::documents_table(), array('id'=>(int)$old_row->id), array('%d'));
+            }
+        }
         $wpdb->update($table, array('document_status'=>'pending','document_rejection_reason'=>'','document_reviewed_at'=>null,'document_reviewed_by'=>null), array('id'=>$id));
         wp_safe_redirect(wc_get_account_endpoint_url('dietup-courses')); exit;
     }
@@ -293,8 +313,8 @@ final class DietUp_Verification {
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM ".self::documents_table()." WHERE registration_id=%d AND document_type='certificate' ORDER BY id DESC LIMIT 1", $registration_id));
         if (!$row) { status_header(404); exit; }
         $inline = isset($_GET['inline']) && '1' === $_GET['inline'];
-        self::stream_file($row, $inline);
         $wpdb->update($registrations, array('certificate_status'=>'delivered'), array('id'=>$registration_id), array('%s'), array('%d'));
+        self::stream_file($row, $inline);
     }
 
     private static function stream_file($row, $inline) {
