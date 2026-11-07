@@ -16,6 +16,7 @@ define('DIETUP_PATH', plugin_dir_path(__FILE__));
 define('DIETUP_URL', plugin_dir_url(__FILE__));
 
 require_once DIETUP_PATH . 'includes/class-dietup-integrations.php';
+require_once DIETUP_PATH . 'includes/trait-dietup-zibal.php';
 require_once DIETUP_PATH . 'includes/class-dietup-plugin.php';
 
 register_activation_hook(__FILE__, array('DietUp_Plugin', 'activate'));
