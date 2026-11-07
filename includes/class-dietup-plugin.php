@@ -18,6 +18,9 @@ final class DietUp_Plugin {
         if (get_option('dietup_db_version') !== DIETUP_VERSION) { self::activate(); }
         add_shortcode('dietup_registration', array($this, 'render_shortcode'));
         add_action('wp_enqueue_scripts', array($this, 'assets'));
+        add_action('init', array($this, 'register_account_endpoint'), 9);
+        add_filter('woocommerce_account_menu_items', array($this, 'account_menu_items'));
+        add_action('woocommerce_account_dietup-courses_endpoint', array($this, 'render_account_courses'));
         add_action('admin_menu', array($this, 'admin_menu'));
         add_action('admin_post_dietup_save_settings', array($this, 'save_settings'));
         add_action('admin_post_nopriv_dietup_zibal_callback', array($this, 'zibal_callback'));
@@ -37,6 +40,7 @@ final class DietUp_Plugin {
         $charset = $wpdb->get_charset_collate();
         $sql = "CREATE TABLE {$table} (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            user_id bigint(20) unsigned NULL,
             full_name varchar(190) NOT NULL,
             mobile varchar(20) NOT NULL,
             email varchar(190) NOT NULL,
@@ -61,6 +65,7 @@ final class DietUp_Plugin {
             created_at datetime NOT NULL,
             updated_at datetime NULL,
             PRIMARY KEY  (id),
+            KEY user_id (user_id),
             KEY mobile (mobile),
             KEY email (email),
             KEY package_key (package_key),
@@ -69,7 +74,54 @@ final class DietUp_Plugin {
             KEY created_at (created_at)
         ) {$charset};";
         dbDelta($sql);
+        add_rewrite_endpoint('dietup-courses', EP_ROOT | EP_PAGES);
+        flush_rewrite_rules();
         update_option('dietup_db_version', DIETUP_VERSION);
+    }
+
+    public function register_account_endpoint() {
+        add_rewrite_endpoint('dietup-courses', EP_ROOT | EP_PAGES);
+    }
+
+    public function account_menu_items($items) {
+        if (!function_exists('wc_get_account_endpoint_url')) { return $items; }
+        $new_items = array();
+        foreach ($items as $key => $label) {
+            $new_items[$key] = $label;
+            if ('orders' === $key) { $new_items['dietup-courses'] = 'دوره‌های دایت‌آپ من'; }
+        }
+        if (!isset($new_items['dietup-courses'])) { $new_items['dietup-courses'] = 'دوره‌های دایت‌آپ من'; }
+        return $new_items;
+    }
+
+    public function render_account_courses() {
+        if (!is_user_logged_in()) { echo '<p>برای مشاهده ثبت‌نام‌های دایت‌آپ ابتدا وارد حساب کاربری شوید.</p>'; return; }
+        global $wpdb;
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$this->table} WHERE user_id = %d ORDER BY id DESC LIMIT 100", get_current_user_id()));
+        $telegram = get_option('dietup_telegram_url', '');
+        echo '<div class="dietup-account-courses" dir="rtl"><h2>دوره‌های دایت‌آپ من</h2>';
+        if (!$rows) { echo '<p>هنوز ثبت‌نامی به حساب کاربری شما متصل نشده است.</p></div>'; return; }
+        foreach ($rows as $row) {
+            $package = $this->packages()[$row->package_key]['title'] ?? $row->package_key;
+            echo '<section class="dietup-account-registration" style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:0 0 16px">';
+            echo '<h3>' . esc_html($package) . '</h3><p>نام ثبت‌نام: ' . esc_html($row->full_name) . '</p>';
+            echo '<p>شماره ثبت‌نام: ' . esc_html($row->id) . ' | تاریخ: ' . esc_html($row->created_at) . '</p>';
+            echo '<p>وضعیت پرداخت: <strong>' . esc_html($this->payment_label($row->payment_status)) . '</strong></p>';
+            if ('paid' === $row->payment_status) {
+                echo '<p>وضعیت لایسنس: ' . esc_html($this->license_label($row->license_status)) . '</p>';
+                if ('issued' === $row->license_status && $row->license_key) { echo '<label>کلید لایسنس SpotPlayer</label><textarea readonly style="width:100%;min-height:90px;direction:ltr">' . esc_textarea($row->license_key) . '</textarea>'; }
+                elseif ('unknown' === $row->license_status) { echo '<p>صدور لایسنس نیازمند بررسی پشتیبانی است.</p>'; }
+                if ('complete' === $row->package_key) {
+                    $resources = DietUp_Private_Files::resources();
+                    if (!empty($resources['booklet']['path']) && is_file($resources['booklet']['path'])) { echo '<p><a href="' . esc_url(DietUp_Private_Files::account_download_url((int)$row->id, 'booklet')) . '">دانلود جزوه دوره (PDF)</a></p>'; }
+                    else { echo '<p>جزوه دوره هنوز بارگذاری نشده است.</p>'; }
+                    if (!empty($resources['video']['path']) && is_file($resources['video']['path'])) { echo '<p><a href="' . esc_url(DietUp_Private_Files::account_download_url((int)$row->id, 'video')) . '">دانلود ویدئوی آفلاین دوره</a></p>'; }
+                }
+                if ($telegram) { echo '<p><a href="' . esc_url($telegram) . '" target="_blank" rel="noopener noreferrer">ورود به کانال / گروه تلگرام دوره</a></p>'; }
+            }
+            echo '</section>';
+        }
+        echo '</div>';
     }
 
     private function packages() {
@@ -90,6 +142,12 @@ final class DietUp_Plugin {
     }
 
     public function render_shortcode() {
+        if (!is_user_logged_in()) {
+            $account_url = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink());
+            $return_url = get_permalink();
+            if ($account_url && $return_url) { $account_url = add_query_arg('redirect_to', rawurlencode($return_url), $account_url); }
+            return '<div class="dietup-wrap" dir="rtl"><div class="dietup-notice">برای ثبت‌نام و مشاهده دوره در پنل شخصی، ابتدا وارد حساب کاربری خود شوید. <a href="' . esc_url($account_url) . '">ورود / عضویت</a></div></div>';
+        }
         $status = isset($_GET['dietup_status']) ? sanitize_key(wp_unslash($_GET['dietup_status'])) : '';
         ob_start();
         echo '<div class="dietup-wrap" dir="rtl">';
@@ -159,6 +217,11 @@ final class DietUp_Plugin {
     }
 
     public function handle_registration() {
+        if (!is_user_logged_in()) {
+            $account_url = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(wp_get_referer() ?: home_url('/'));
+            wp_safe_redirect($account_url);
+            exit;
+        }
         if ('POST' !== strtoupper($_SERVER['REQUEST_METHOD'] ?? '') ||
             !isset($_POST['dietup_nonce']) ||
             !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_nonce'])), 'dietup_register')) {
@@ -198,9 +261,10 @@ final class DietUp_Plugin {
             'package_key' => $package_key, 'package_price' => absint($p['price']),
             'certificate_name' => ($needs_certificate ? $certificate_name : null),
             'terms_accepted' => 1, 'payment_status' => 'pending',
-            'license_status' => 'not_issued', 'access_token_hash' => hash('sha256', $access_token = bin2hex(random_bytes(32))), 'created_at' => current_time('mysql')
+            'license_status' => 'not_issued', 'access_token_hash' => hash('sha256', $access_token = bin2hex(random_bytes(32))), 'created_at' => current_time('mysql'),
+            'user_id' => get_current_user_id()
         );
-        $formats = array('%s','%s','%s','%s','%s','%s','%s','%s','%d','%s','%d','%s','%s','%s','%s');
+        $formats = array('%s','%s','%s','%s','%s','%s','%s','%s','%d','%s','%d','%s','%s','%s','%s','%d');
         if (null === $age) {
             $data['age'] = null;
             $formats[] = '%s';
@@ -250,6 +314,7 @@ final class DietUp_Plugin {
         wp_nonce_field('dietup_save_settings', 'dietup_settings_nonce');
         echo '<h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
+        echo '<tr><th><label for="dietup_telegram_url">لینک تلگرام دوره</label></th><td><input class="regular-text" type="url" id="dietup_telegram_url" name="telegram_url" value="' . esc_attr(get_option('dietup_telegram_url', '')) . '" placeholder="https://t.me/..."><p class="description">این لینک در پنل ثبت‌نام‌کنندگان پرداخت‌شده نمایش داده می‌شود.</p></td></tr>';
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_spotplayer_api_key">API Key</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_spotplayer_api_key" name="spotplayer_api_key" value="" placeholder="'.($s['spotplayer_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'SpotPlayer API Key').'"><p class="description">کلید فعلی نمایش داده نمی‌شود.</p>'.($s['spotplayer_api_key'] ? '<label><input type="checkbox" name="clear_spotplayer_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
         echo '<tr><th><label for="dietup_spotplayer_course_id">شناسه دوره / Course ID</label></th><td><input class="regular-text" id="dietup_spotplayer_course_id" name="spotplayer_course_id" value="'.esc_attr($s['spotplayer_course_id']).'"></td></tr>';
@@ -268,7 +333,7 @@ final class DietUp_Plugin {
         foreach ($text_fields as $field) {
             $new[$field] = isset($_POST[$field]) ? sanitize_text_field(wp_unslash($_POST[$field])) : '';
         }
-        $url_fields = array('gateway_payment_url','gateway_verify_url','spotplayer_api_url');
+        $url_fields = array('gateway_payment_url','gateway_verify_url','spotplayer_api_url','telegram_url');
         foreach ($url_fields as $field) {
             $raw = isset($_POST[$field]) ? esc_url_raw(wp_unslash($_POST[$field])) : '';
             $new[$field] = ('' === $raw || 'https' === wp_parse_url($raw, PHP_URL_SCHEME)) ? $raw : '';
@@ -282,6 +347,7 @@ final class DietUp_Plugin {
             }
         }
         update_option('dietup_integration_settings', $new, false);
+        update_option('dietup_telegram_url', isset($new['telegram_url']) ? $new['telegram_url'] : '', false);
         wp_safe_redirect(add_query_arg(array('page'=>'dietup-settings','settings_saved'=>'1'), admin_url('admin.php')));
         exit;
     }
