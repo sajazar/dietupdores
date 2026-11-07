@@ -439,7 +439,7 @@ final class DietUp_Verification {
         global $wpdb;
         $status = $registration->document_status ?? 'pending';
         $labels = array('pending'=>'در انتظار بررسی','approved'=>'مدرک تأیید شده','rejected'=>'مدرک رد شده','needs_revision'=>'نیازمند اصلاح مدرک');
-        echo '<div class="dietup-verification-account"><p><strong>وضعیت مدرک:</strong> '.esc_html($labels[$status] ?? $status).'</p>';
+        echo '<div class="dietup-verification-account"><p><strong>گروه حرفه‌ای:</strong> '.esc_html($registration->profession).' | <strong>تخصص / رشته:</strong> '.esc_html($registration->specialty ?? '').'</p><p><strong>وضعیت مدرک:</strong> '.esc_html($labels[$status] ?? $status).'</p>';
         if (in_array($status, array('rejected','needs_revision'), true)) {
             echo '<p>توضیح مدیریت: '.esc_html($registration->document_rejection_reason ?? '').'</p>';
             echo '<form method="post" enctype="multipart/form-data" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_resubmit_documents"><input type="hidden" name="registration_id" value="'.esc_attr($registration->id).'">';
