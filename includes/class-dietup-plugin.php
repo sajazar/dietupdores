@@ -2,6 +2,7 @@
 if (!defined('ABSPATH')) { exit; }
 
 final class DietUp_Plugin {
+    use DietUp_Zibal_Trait;
     private static $instance = null;
     private $table;
 
@@ -18,6 +19,9 @@ final class DietUp_Plugin {
         add_action('wp_enqueue_scripts', array($this, 'assets'));
         add_action('admin_menu', array($this, 'admin_menu'));
         add_action('admin_post_dietup_save_settings', array($this, 'save_settings'));
+        add_action('admin_post_nopriv_dietup_zibal_callback', array($this, 'zibal_callback'));
+        add_action('admin_post_dietup_zibal_callback', array($this, 'zibal_callback'));
+        add_action('template_redirect', array($this, 'render_access_page'));
         add_action('admin_post_nopriv_dietup_register', array($this, 'handle_registration'));
         add_action('admin_post_dietup_register', array($this, 'handle_registration'));
         add_action('admin_post_dietup_export_csv', array($this, 'export_csv'));
@@ -191,9 +195,9 @@ final class DietUp_Plugin {
             'package_key' => $package_key, 'package_price' => absint($p['price']),
             'certificate_name' => ($needs_certificate ? $certificate_name : null),
             'terms_accepted' => 1, 'payment_status' => 'pending',
-            'license_status' => 'not_issued', 'created_at' => current_time('mysql')
+            'license_status' => 'not_issued', 'access_token_hash' => hash('sha256', $access_token = bin2hex(random_bytes(32))), 'created_at' => current_time('mysql')
         );
-        $formats = array('%s','%s','%s','%s','%s','%s','%s','%s','%d','%s','%d','%s','%s','%s');
+        $formats = array('%s','%s','%s','%s','%s','%s','%s','%s','%d','%s','%d','%s','%s','%s','%s');
         if (null === $age) {
             $data['age'] = null;
             $formats[] = '%s';
@@ -202,7 +206,8 @@ final class DietUp_Plugin {
             $formats[] = '%d';
         }
         $ok = $wpdb->insert($this->table, $data, $formats);
-        $this->redirect_status($ok ? 'received' : 'error');
+        if (!$ok) { $this->redirect_status('error'); }
+        $this->start_zibal_payment((int)$wpdb->insert_id, $access_token);
     }
 
     public function admin_menu() {
