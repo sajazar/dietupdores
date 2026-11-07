@@ -26,6 +26,7 @@ final class DietUp_Plugin {
         add_action('admin_post_nopriv_dietup_register', array($this, 'handle_registration'));
         add_action('admin_post_dietup_register', array($this, 'handle_registration'));
         add_action('admin_post_dietup_export_csv', array($this, 'export_csv'));
+        add_action('admin_post_dietup_export_xlsx', array($this, 'export_xlsx'));
     }
 
     public static function activate() {
@@ -313,7 +314,11 @@ final class DietUp_Plugin {
         echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_export_csv">';
         wp_nonce_field('dietup_export_csv','dietup_export_nonce');
         echo '<input type="hidden" name="payment_status" value="'.esc_attr($status).'"><input type="hidden" name="package_key" value="'.esc_attr($package).'"><input type="hidden" name="s" value="'.esc_attr($search).'">';
-        echo '<button class="button button-primary">دریافت خروجی CSV (Excel)</button></form><p>برای جلوگیری از کندی، حداکثر ۵۰۰ رکورد در این فهرست نمایش داده می‌شود.</p>';
+        echo '<button class="button button-primary">دریافت خروجی CSV</button></form> ';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="display:inline-block;margin-right:8px"><input type="hidden" name="action" value="dietup_export_xlsx">';
+        wp_nonce_field('dietup_export_xlsx', 'dietup_xlsx_nonce');
+        echo '<input type="hidden" name="payment_status" value="' . esc_attr($status) . '"><input type="hidden" name="package_key" value="' . esc_attr($package) . '"><input type="hidden" name="s" value="' . esc_attr($search) . '">';
+        echo '<button class="button">دریافت فایل Excel (XLSX)</button></form><p>برای جلوگیری از کندی، حداکثر ۵۰۰ رکورد در این فهرست نمایش داده می‌شود.</p>';
         echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th></tr></thead><tbody>';
         if ($rows) { foreach ($rows as $r) {
             echo '<tr><td>'.esc_html($r->id).'</td><td>'.esc_html($r->full_name).'</td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).'</td><td>'.esc_html($this->payment_label($r->payment_status)).'</td><td>'.esc_html($this->license_label($r->license_status)).'</td><td>'.esc_html($r->created_at).'</td></tr>';
@@ -329,6 +334,84 @@ final class DietUp_Plugin {
     private function license_label($s) {
         $labels = array('not_issued'=>'صادر نشده','pending'=>'در صف صدور','issued'=>'صادر شده','failed'=>'خطا');
         return $labels[$s] ?? $s;
+    }
+
+    private function xlsx_column_name($index) {
+        $name = '';
+        while ($index > 0) {
+            $index--;
+            $name = chr(65 + ($index % 26)) . $name;
+            $index = (int) floor($index / 26);
+        }
+        return $name;
+    }
+
+    private function xlsx_cell_xml($value, $column, $row, $numeric = false) {
+        $ref = $column . $row;
+        if ($numeric && is_numeric($value) && '' !== (string)$value) {
+            return '<c r="' . $ref . '"><v>' . (string)(0 + $value) . '</v></c>';
+        }
+        $value = htmlspecialchars((string)$value, ENT_QUOTES | ENT_XML1, 'UTF-8');
+        return '<c r="' . $ref . '" t="inlineStr"><is><t xml:space="preserve">' . $value . '</t></is></c>';
+    }
+
+    public function export_xlsx() {
+        if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
+        if (!isset($_POST['dietup_xlsx_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_xlsx_nonce'])), 'dietup_export_xlsx')) { wp_die('درخواست نامعتبر است.'); }
+        if (!class_exists('ZipArchive')) { wp_die('برای ساخت فایل XLSX، افزونه PHP ZipArchive باید روی هاست فعال باشد.'); }
+
+        global $wpdb;
+        $status = isset($_POST['payment_status']) ? sanitize_key(wp_unslash($_POST['payment_status'])) : '';
+        $package = isset($_POST['package_key']) ? sanitize_key(wp_unslash($_POST['package_key'])) : '';
+        $search = isset($_POST['s']) ? sanitize_text_field(wp_unslash($_POST['s'])) : '';
+        $where = array('1=1'); $args = array();
+        if ($status && in_array($status, array('pending','paid','failed','refunded'), true)) { $where[] = 'payment_status=%s'; $args[] = $status; }
+        if ($package && isset($this->packages()[$package])) { $where[] = 'package_key=%s'; $args[] = $package; }
+        if ($search) { $like = '%' . $wpdb->esc_like($search) . '%'; $where[] = '(full_name LIKE %s OR mobile LIKE %s OR email LIKE %s)'; array_push($args, $like, $like, $like); }
+        $sql = "SELECT * FROM {$this->table} WHERE " . implode(' AND ', $where) . ' ORDER BY id DESC';
+        $rows = $args ? $wpdb->get_results($wpdb->prepare($sql, $args), ARRAY_A) : $wpdb->get_results($sql, ARRAY_A);
+
+        $headers = array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','محل فعالیت','توضیحات محل','پکیج','مبلغ تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت');
+        $sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+        $row_number = 1;
+        $sheet .= '<row r="1">';
+        foreach ($headers as $i => $value) { $sheet .= $this->xlsx_cell_xml($value, $this->xlsx_column_name($i + 1), 1); }
+        $sheet .= '</row>';
+        foreach ($rows as $record) {
+            $row_number++;
+            $values = array(
+                $record['id'], $record['full_name'], $record['mobile'], $record['email'], $record['university'], $record['age'],
+                $record['profession'], $record['workplace'], $record['workplace_other'], $record['package_key'], $record['package_price'],
+                $record['certificate_name'], $record['payment_status'], $record['payment_ref_id'], $record['license_status'],
+                $record['created_at'], $record['paid_at']
+            );
+            $sheet .= '<row r="' . $row_number . '">';
+            foreach ($values as $i => $value) {
+                $numeric = in_array($i, array(0, 5, 10), true);
+                $sheet .= $this->xlsx_cell_xml($value, $this->xlsx_column_name($i + 1), $row_number, $numeric);
+            }
+            $sheet .= '</row>';
+        }
+        $sheet .= '</sheetData></worksheet>';
+
+        $tmp = tempnam(sys_get_temp_dir(), 'dietup-xlsx-');
+        if (!$tmp) { wp_die('ساخت فایل موقت Excel ممکن نشد.'); }
+        $zip = new ZipArchive();
+        if (true !== $zip->open($tmp, ZipArchive::OVERWRITE)) { @unlink($tmp); wp_die('ساخت فایل XLSX ناموفق بود.'); }
+        $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+        $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+        $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="ثبت‌نام‌ها" sheetId="1" r:id="rId1"/></sheets></workbook>');
+        $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
+        $zip->addFromString('xl/worksheets/sheet1.xml', $sheet);
+        $zip->close();
+
+        nocache_headers();
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="dietup-registrations-' . gmdate('Y-m-d') . '.xlsx"');
+        header('Content-Length: ' . (string)filesize($tmp));
+        readfile($tmp);
+        @unlink($tmp);
+        exit;
     }
 
     public function export_csv() {
