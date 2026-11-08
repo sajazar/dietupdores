@@ -42,6 +42,7 @@ final class DietUp_Plugin {
         $sql = "CREATE TABLE {$table} (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
             user_id bigint(20) unsigned NULL,
+            return_url text NULL,
             full_name varchar(190) NOT NULL,
             mobile varchar(20) NOT NULL,
             email varchar(190) NOT NULL,
@@ -141,6 +142,18 @@ final class DietUp_Plugin {
             'certificate' => array('title' => 'پکیج آنلاین + گواهی', 'old' => 0, 'price' => 1490000, 'features' => array('دسترسی آنلاین به دوره', 'گواهی شرکت در دوره')),
             'complete' => array('title' => 'پکیج کامل', 'old' => 12000000, 'price' => 2900000, 'features' => array('دسترسی آنلاین به دوره', 'فایل‌های آفلاین دوره', 'گواهی شرکت در دوره', 'جزوه کامل دوره')),
         );
+        $saved = get_option('dietup_packages_settings', array());
+        if (is_array($saved)) {
+            foreach ($defaults as $key => $package) {
+                if (!empty($saved[$key]) && is_array($saved[$key])) {
+                    $defaults[$key]['title'] = sanitize_text_field($saved[$key]['title'] ?? $package['title']);
+                    $defaults[$key]['price'] = max(0, absint($saved[$key]['price'] ?? $package['price']));
+                    $defaults[$key]['old'] = max(0, absint($saved[$key]['old'] ?? $package['old']));
+                    $features = $saved[$key]['features'] ?? $package['features'];
+                    $defaults[$key]['features'] = is_array($features) ? array_values(array_filter(array_map('sanitize_text_field', $features))) : $package['features'];
+                }
+            }
+        }
         return apply_filters('dietup_packages', $defaults);
     }
 
@@ -166,14 +179,45 @@ final class DietUp_Plugin {
         $status = isset($_GET['dietup_status']) ? sanitize_key(wp_unslash($_GET['dietup_status'])) : '';
         ob_start();
         echo '<div class="dietup-wrap" dir="rtl">';
-        if ('received' === $status) {
-            echo '<div class="dietup-notice success">اطلاعات شما ثبت شد. برای تکمیل ثبت‌نام، مسیر پرداخت پس از پیکربندی درگاه فعال خواهد شد.</div>';
-        } elseif ('error' === $status) {
-            echo '<div class="dietup-notice error">ثبت اطلاعات انجام نشد. لطفاً اطلاعات را بررسی و دوباره تلاش کنید.</div>';
+        if ('error' === $status) {
+            echo '<div class="dietup-notice error">ثبت اطلاعات یا اتصال به درگاه با مشکل روبه‌رو شد. لطفاً اطلاعات را بررسی و دوباره تلاش کنید.</div>';
+        } elseif ('cancelled' === $status || (isset($_GET['dietup_payment']) && 'cancelled' === sanitize_key(wp_unslash($_GET['dietup_payment'])))) {
+            echo '<div class="dietup-notice error">پرداخت لغو شد یا توسط درگاه تأیید نشد. پرداخت موفقی برای این ثبت‌نام ثبت نشده است. می‌توانید دوباره اقدام کنید.</div>';
+        }
+        $access_token = isset($_GET['dietup_access']) ? sanitize_text_field(wp_unslash($_GET['dietup_access'])) : '';
+        if ($access_token && preg_match('/^[a-f0-9]{64}$/', $access_token)) {
+            global $wpdb;
+            $registration = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE access_token_hash=%s LIMIT 1", hash('sha256', $access_token)));
+            if ($registration && (int)$registration->user_id === get_current_user_id()) {
+                $package = $this->packages()[$registration->package_key] ?? array('title'=>$registration->package_key,'features'=>array());
+                echo '<section class="dietup-payment-result"><h2>نتیجه ثبت‌نام و پرداخت</h2>';
+                echo '<p><strong>نام:</strong> '.esc_html($registration->full_name).'</p><p><strong>شماره ثبت‌نام:</strong> '.esc_html($registration->id).'</p>';
+                echo '<p><strong>پکیج:</strong> '.esc_html($package['title']).'</p><p><strong>مبلغ ثبت‌شده:</strong> '.esc_html(number_format_i18n((int)$registration->package_price)).' تومان</p>';
+                echo '<p><strong>وضعیت پرداخت:</strong> '.esc_html($this->payment_label($registration->payment_status)).'</p>';
+                if ('paid' === $registration->payment_status) {
+                    echo '<h3>مشخصات دوره</h3><ul>';
+                    foreach ((array)($package['features'] ?? array()) as $feature) { echo '<li>'.esc_html($feature).'</li>'; }
+                    echo '</ul>';
+                    if ('issued' === $registration->license_status && $registration->license_key) { echo '<p>کلید SpotPlayer:</p><textarea readonly style="width:100%;min-height:90px;direction:ltr">'.esc_textarea($registration->license_key).'</textarea>'; }
+                    elseif ('unknown' === $registration->license_status) { echo '<p>صدور لایسنس نیازمند بررسی پشتیبانی است.</p>'; }
+                    elseif ('pending' === $registration->license_status || 'issuing' === $registration->license_status) { echo '<p>صدور دسترسی در حال تکمیل است.</p>'; }
+                    if ('complete' === $registration->package_key) {
+                        $resources = DietUp_Private_Files::resources();
+                        foreach (array('video'=>'دریافت ویدئوی آفلاین دوره','booklet'=>'دانلود جزوه دوره') as $type=>$label) {
+                            if (!empty($resources[$type]['path']) && is_file($resources[$type]['path'])) { echo '<p><a href="'.esc_url(DietUp_Private_Files::download_url($type, $access_token)).'">'.esc_html($label).'</a></p>'; }
+                            else { echo '<p>'.esc_html($label).': فایل هنوز بارگذاری نشده است.</p>'; }
+                        }
+                    }
+                    $settings = $this->get_settings();
+                    if (!empty($settings['telegram_url'])) { echo '<p><a href="'.esc_url($settings['telegram_url']).'" target="_blank" rel="noopener noreferrer">ورود به کانال / گروه تلگرام دوره</a></p>'; }
+                }
+                echo '</section>';
+            }
         }
         ?>
         <form class="dietup-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <input type="hidden" name="action" value="dietup_register">
+            <input type="hidden" name="return_url" value="<?php echo esc_url(get_permalink()); ?>">
             <?php wp_nonce_field('dietup_register', 'dietup_nonce'); ?>
             <h2>فرم ثبت‌نام دوره آمپول‌های لاغری | دایت‌آپ</h2>
             <fieldset><legend>اطلاعات فردی</legend>
@@ -196,8 +240,9 @@ final class DietUp_Plugin {
                     <option value="<?php echo esc_attr($specialty_option); ?>"><?php echo esc_html($specialty_option); ?></option><?php endforeach; ?>
                     </select>
                 </label>
-                <label data-dietup-specialty-text hidden>رشته / گرایش تحصیلی *
-                    <input name="specialty_text" type="text" maxlength="190" placeholder="رشته یا گرایش تحصیلی">
+                <label class="dietup-document-upload">بارگذاری مدرک تحصیلی یا تخصصی *
+                    <input type="file" name="dietup_documents[]" accept=".pdf,.jpg,.jpeg,.png" multiple required>
+                    <small>حداکثر ۵ فایل PDF یا تصویر JPG/PNG؛ حداکثر ۵ مگابایت برای هر فایل.</small>
                 </label>
                 <label data-dietup-specialty-other hidden>عنوان تخصص (سایر) *
                     <input name="specialty_custom" type="text" maxlength="190">
@@ -209,10 +254,6 @@ final class DietUp_Plugin {
                     </select>
                 </label>
                 <label data-dietup-other hidden>توضیحات محل فعالیت<input name="workplace_other" type="text" maxlength="190"></label>
-                <label class="dietup-document-upload">بارگذاری مدرک تحصیلی یا تخصصی *
-                    <input type="file" name="dietup_documents[]" accept=".pdf,.jpg,.jpeg,.png" multiple required>
-                    <small>حداکثر ۵ فایل PDF یا تصویر JPG/PNG؛ حداکثر ۵ مگابایت برای هر فایل.</small>
-                </label>
             </fieldset>
             <fieldset><legend>انتخاب پکیج</legend><div class="dietup-packages">
             <?php foreach ($this->packages() as $key => $package) : ?>
@@ -240,9 +281,18 @@ final class DietUp_Plugin {
         return ob_get_clean();
     }
 
+    private function validated_return_url($candidate = '') {
+        $fallback = home_url('/');
+        $candidate = $candidate ? wp_unslash($candidate) : $fallback;
+        $url = wp_validate_redirect(esc_url_raw($candidate), $fallback);
+        $home_host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+        $url_host = strtolower((string) wp_parse_url($url, PHP_URL_HOST));
+        return ($url_host && $home_host && $url_host === $home_host) ? $url : $fallback;
+    }
+
     private function redirect_status($status) {
-        $url = wp_get_referer();
-        if (!$url) { $url = home_url('/'); }
+        $candidate = isset($_POST['return_url']) ? sanitize_text_field(wp_unslash($_POST['return_url'])) : '';
+        $url = $this->validated_return_url($candidate ?: (wp_get_referer() ?: home_url('/')));
         wp_safe_redirect(add_query_arg('dietup_status', $status, $url));
         exit;
     }
@@ -267,9 +317,8 @@ final class DietUp_Plugin {
         $university = $get('university');
         $profession = $get('profession');
         $specialty = $get('specialty');
-        $specialty_text = $get('specialty_text');
         $specialty_custom = $get('specialty_custom');
-        $specialty_value = ('پزشک متخصص' === $profession) ? ('سایر تخصص‌ها' === $specialty ? $specialty_custom : $specialty) : $specialty_text;
+        $specialty_value = ('پزشک متخصص' === $profession) ? ('سایر تخصص‌ها' === $specialty ? $specialty_custom : $specialty) : '';
         $workplace = $get('workplace');
         $package_key = sanitize_key($get('package_key'));
         $age_raw = $get('age');
@@ -281,9 +330,8 @@ final class DietUp_Plugin {
         $valid_workplaces = array('مطب','کلینیک','بیمارستان','داروخانه','مرکز مشاوره تغذیه','دانشگاه','هنوز دانشجو هستم','سایر');
         $needs_certificate = in_array($package_key, array('certificate','complete'), true);
         if (!$full_name || !preg_match('/^09[0-9]{9}$/', $mobile) || !is_email($email) || !$university ||
-            !in_array($profession, $valid_professions, true) || '' === $specialty_value ||
+            !in_array($profession, $valid_professions, true) ||
             ('پزشک متخصص' === $profession && !in_array($specialty, DietUp_Verification::specialties(), true)) ||
-            ('پزشک متخصص' !== $profession && !$specialty_text) ||
             ('پزشک متخصص' === $profession && 'سایر تخصص‌ها' === $specialty && !$specialty_custom) ||
             !in_array($workplace, $valid_workplaces, true) ||
             !isset($packages[$package_key]) || empty($_POST['confirm_info']) || empty($_POST['accept_terms']) ||
@@ -295,6 +343,7 @@ final class DietUp_Plugin {
         $p = $packages[$package_key];
         $data = array(
             'full_name' => $full_name, 'mobile' => $mobile, 'email' => $email,
+            'return_url' => $this->validated_return_url($get('return_url')),
             'university' => $university, 'profession' => $profession, 'specialty' => $specialty_value, 'document_status' => 'pending',
             'document_rejection_reason' => '', 'certificate_status' => 'not_issued', 'workplace' => $workplace,
             'workplace_other' => ('سایر' === $workplace ? $other : null),
@@ -354,7 +403,15 @@ final class DietUp_Plugin {
         echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">';
         echo '<input type="hidden" name="action" value="dietup_save_settings">';
         wp_nonce_field('dietup_save_settings', 'dietup_settings_nonce');
-        echo '<h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
+        echo '<h2>تنظیم پکیج‌های دوره</h2><p>عنوان، قیمت و امکانات هر پکیج را ویرایش کنید. هر امکان را در یک خط بنویسید. قیمت‌ها به تومان هستند.</p>';
+        echo '<table class="widefat striped" style="max-width:1000px;margin:12px 0 24px"><thead><tr><th>پکیج</th><th>عنوان</th><th>قیمت (تومان)</th><th>قیمت قبلی (اختیاری)</th><th>مشخصات (هر مورد یک خط)</th></tr></thead><tbody>';
+        foreach ($this->packages() as $key=>$package) {
+            echo '<tr><td>'.esc_html($key).'</td><td><input class="regular-text" name="packages['.esc_attr($key).'][title]" value="'.esc_attr($package['title']).'"></td>';
+            echo '<td><input type="number" min="0" step="1" name="packages['.esc_attr($key).'][price]" value="'.esc_attr($package['price']).'"></td>';
+            echo '<td><input type="number" min="0" step="1" name="packages['.esc_attr($key).'][old]" value="'.esc_attr($package['old']).'"></td>';
+            echo '<td><textarea rows="4" class="large-text" name="packages['.esc_attr($key).'][features]">'.esc_textarea(implode("\n",$package['features'])).'</textarea></td></tr>';
+        }
+        echo '</tbody></table><h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
         echo '<tr><th><label for="dietup_telegram_url">لینک تلگرام دوره</label></th><td><input class="regular-text" type="url" id="dietup_telegram_url" name="telegram_url" value="' . esc_attr($s['telegram_url']) . '" placeholder="https://t.me/..."><p class="description">این لینک در پنل ثبت‌نام‌کنندگان پرداخت‌شده نمایش داده می‌شود.</p></td></tr>';
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
@@ -388,6 +445,26 @@ final class DietUp_Plugin {
         $new['gateway_sandbox'] = isset($_POST['gateway_sandbox']) ? 1 : 0;
         $visible_packages = isset($_POST['spotplayer_visible_packages']) && is_array($_POST['spotplayer_visible_packages']) ? array_map('sanitize_key', wp_unslash($_POST['spotplayer_visible_packages'])) : array();
         $new['spotplayer_visible_packages'] = array_values(array_intersect(array('online','certificate','complete'), $visible_packages));
+        $package_input = isset($_POST['packages']) && is_array($_POST['packages']) ? wp_unslash($_POST['packages']) : array();
+        $package_defaults = array(
+            'online' => array('title'=>'پکیج آنلاین','price'=>990000,'old'=>9900000,'features'=>array('دسترسی آنلاین به دوره')),
+            'certificate' => array('title'=>'پکیج آنلاین + گواهی','price'=>1490000,'old'=>0,'features'=>array('دسترسی آنلاین به دوره','گواهی شرکت در دوره')),
+            'complete' => array('title'=>'پکیج کامل','price'=>2900000,'old'=>12000000,'features'=>array('دسترسی آنلاین به دوره','فایل‌های آفلاین دوره','گواهی شرکت در دوره','جزوه کامل دوره')),
+        );
+        $clean_packages = array();
+        foreach ($package_defaults as $key => $defaults) {
+            $input = isset($package_input[$key]) && is_array($package_input[$key]) ? $package_input[$key] : array();
+            $features_text = sanitize_textarea_field($input['features'] ?? implode("\n", $defaults['features']));
+            $features = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $features_text))));
+            $clean_packages[$key] = array(
+                'title' => sanitize_text_field($input['title'] ?? $defaults['title']),
+                'price' => absint($input['price'] ?? $defaults['price']),
+                'old' => absint($input['old'] ?? $defaults['old']),
+                'features' => $features ?: $defaults['features'],
+            );
+            if ('' === $clean_packages[$key]['title']) { $clean_packages[$key]['title'] = $defaults['title']; }
+        }
+        update_option('dietup_packages_settings', $clean_packages, false);
         foreach (array('spotplayer_api_key') as $secret) {
             if (!empty($_POST['clear_'.$secret])) {
                 $new[$secret] = '';
