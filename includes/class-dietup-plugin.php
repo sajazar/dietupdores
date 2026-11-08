@@ -30,6 +30,8 @@ final class DietUp_Plugin {
         add_action('template_redirect', array($this, 'render_access_page'));
         add_action('admin_post_nopriv_dietup_register', array($this, 'handle_registration'));
         add_action('admin_post_dietup_register', array($this, 'handle_registration'));
+        add_action('wp_ajax_dietup_validate_coupon', array($this, 'ajax_validate_coupon'));
+        add_action('wp_ajax_nopriv_dietup_validate_coupon', array($this, 'ajax_validate_coupon'));
         add_action('admin_post_dietup_export_csv', array($this, 'export_csv'));
         add_action('admin_post_dietup_export_xlsx', array($this, 'export_xlsx'));
         add_action('admin_post_dietup_retry_license', array($this, 'retry_license'));
@@ -62,6 +64,10 @@ final class DietUp_Plugin {
             workplace_other varchar(190) NULL,
             package_key varchar(40) NOT NULL,
             package_price bigint(20) unsigned NOT NULL,
+            base_package_price bigint(20) unsigned NOT NULL DEFAULT 0,
+            discount_code varchar(80) NULL,
+            discount_percent tinyint(3) unsigned NOT NULL DEFAULT 0,
+            discount_amount bigint(20) unsigned NOT NULL DEFAULT 0,
             certificate_name varchar(190) NULL,
             terms_accepted tinyint(1) NOT NULL DEFAULT 0,
             payment_status varchar(30) NOT NULL DEFAULT 'pending',
@@ -138,7 +144,7 @@ final class DietUp_Plugin {
                     else { echo '<p>جزوه دوره هنوز بارگذاری نشده است.</p>'; }
                     if (!empty($resources['video']['path']) && is_file($resources['video']['path'])) { echo '<p><a href="' . esc_url(DietUp_Private_Files::account_download_url((int)$row->id, 'video')) . '">دانلود ویدئوی آفلاین دوره</a></p>'; }
                 }
-                if ($telegram) { echo '<p><a href="' . esc_url($telegram) . '" target="_blank" rel="noopener noreferrer" class="dietup-telegram-button">عضویت در کانال تلگرام دوره</a></p>'; }
+                if ($telegram) { echo '<p><a href="' . esc_url($telegram) . '" target="_blank" rel="noopener noreferrer" class="dietup-telegram-button">عضویت در کانال تلگرام ( لطفا فیلتر شکن خود را روشن کنید )</a></p>'; }
             }
             DietUp_Verification::render_account_section($row);
             echo '</section>';
@@ -189,7 +195,9 @@ final class DietUp_Plugin {
         $status = isset($_GET['dietup_status']) ? sanitize_key(wp_unslash($_GET['dietup_status'])) : '';
         ob_start();
         echo '<div class="dietup-wrap" dir="rtl">';
-        if ('error' === $status) {
+        if ('coupon_invalid' === $status) {
+            echo '<div class="dietup-notice error">کد تخفیف هنگام ثبت نهایی معتبر نبود یا تغییر کرده است. لطفاً کد را بررسی و دوباره فرم را ارسال کنید.</div>';
+        } elseif ('error' === $status) {
             echo '<div class="dietup-notice error">ثبت اطلاعات یا اتصال به درگاه با مشکل روبه‌رو شد. لطفاً اطلاعات را بررسی و دوباره تلاش کنید.</div>';
         } elseif ('cancelled' === $status || (isset($_GET['dietup_payment']) && 'cancelled' === sanitize_key(wp_unslash($_GET['dietup_payment'])))) {
             echo '<div class="dietup-notice error">پرداخت لغو شد یا توسط درگاه تأیید نشد. پرداخت موفقی برای این ثبت‌نام ثبت نشده است. می‌توانید دوباره اقدام کنید.</div>';
@@ -212,7 +220,10 @@ final class DietUp_Plugin {
                 $package = $this->packages()[$registration->package_key] ?? array('title'=>$registration->package_key,'features'=>array());
                 echo '<section class="dietup-payment-result"><h2>نتیجه ثبت‌نام و پرداخت</h2>';
                 echo '<p><strong>نام:</strong> '.esc_html($registration->full_name).'</p><p><strong>شماره ثبت‌نام:</strong> '.esc_html($registration->id).'</p>';
-                echo '<p><strong>پکیج:</strong> '.esc_html($package['title']).'</p><p><strong>مبلغ ثبت‌شده:</strong> '.esc_html(number_format_i18n((int)$registration->package_price)).' تومان</p>';
+                echo '<p><strong>پکیج:</strong> '.esc_html($package['title']).'</p>';
+                $base_price = isset($registration->base_package_price) ? (int)$registration->base_package_price : (int)$registration->package_price;
+                if ((int)$registration->discount_amount > 0) { echo '<p><strong>قیمت پکیج:</strong> '.esc_html(number_format_i18n($base_price)).' تومان</p><p><strong>کد تخفیف:</strong> '.esc_html($registration->discount_code).' ('.esc_html((int)$registration->discount_percent).'% )</p><p><strong>مبلغ تخفیف:</strong> '.esc_html(number_format_i18n((int)$registration->discount_amount)).' تومان</p>'; }
+                echo '<p><strong>مبلغ نهایی ثبت‌شده:</strong> '.esc_html(number_format_i18n((int)$registration->package_price)).' تومان</p>';
                 echo '<p><strong>وضعیت پرداخت:</strong> '.esc_html($this->payment_label($registration->payment_status)).'</p>';
                 if ('paid' === $registration->payment_status) {
                     echo '<h3>مشخصات دوره</h3><ul>';
@@ -233,7 +244,7 @@ final class DietUp_Plugin {
                         }
                     }
                     $settings = $this->get_settings();
-                    if (!empty($settings['telegram_url'])) { echo '<div class="dietup-telegram-warning"><strong>توجه!</strong> لطفاً حتماً از طریق لینک زیر عضو کانال تلگرام شوید؛ زیرا تمامی اطلاع‌رسانی‌های دوره از طریق این کانال انجام می‌شود.</div><p><a href="'.esc_url($settings['telegram_url']).'" target="_blank" rel="noopener noreferrer" class="dietup-telegram-button">عضویت در کانال تلگرام دوره</a></p>'; }
+                    if (!empty($settings['telegram_url'])) { echo '<div class="dietup-telegram-warning"><strong>توجه!</strong> لطفاً حتماً از طریق لینک زیر عضو کانال تلگرام شوید؛ زیرا تمامی اطلاع‌رسانی‌های دوره از طریق این کانال انجام می‌شود.</div><p><a href="'.esc_url($settings['telegram_url']).'" target="_blank" rel="noopener noreferrer" class="dietup-telegram-button">عضویت در کانال تلگرام ( لطفا فیلتر شکن خود را روشن کنید )</a></p>'; }
                     echo '<p class="dietup-account-link-wrap"><a class="dietup-account-link" href="https://www.dietupschool.ir/my-account/dietup-courses/">مشخصات سفارش در پنل کاربری شما</a></p>';
                 }
                 echo '</section>';
@@ -241,7 +252,7 @@ final class DietUp_Plugin {
         }
         if (!$has_paid_registration_result) :
         ?>
-        <form class="dietup-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+        <form class="dietup-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" data-coupon-ajax="<?php echo esc_url(admin_url('admin-ajax.php')); ?>" data-coupon-nonce="<?php echo esc_attr(wp_create_nonce('dietup_coupon')); ?>">
             <input type="hidden" name="action" value="dietup_register">
             <input type="hidden" name="return_url" value="<?php echo esc_url(get_permalink()); ?>">
             <?php wp_nonce_field('dietup_register', 'dietup_nonce'); ?>
@@ -284,7 +295,7 @@ final class DietUp_Plugin {
             <fieldset><legend>انتخاب پکیج</legend><div class="dietup-packages">
             <?php foreach ($this->packages() as $key => $package) : ?>
                 <label class="dietup-package">
-                    <input type="radio" name="package_key" value="<?php echo esc_attr($key); ?>" data-certificate="<?php echo in_array($key, array('certificate','complete'), true) ? '1' : '0'; ?>" required>
+                    <input type="radio" name="package_key" value="<?php echo esc_attr($key); ?>" data-certificate="<?php echo in_array($key, array('certificate','complete'), true) ? '1' : '0'; ?>" data-price="<?php echo esc_attr((int)$package['price']); ?>" required>
                     <strong><?php echo esc_html($package['title']); ?></strong>
                     <small class="dietup-package-course-title">دوره جامع آمپول های لاغری ( دایت آپ )</small>
                     <?php if (!empty($package['old'])) : ?><del><?php echo esc_html(number_format_i18n($package['old'])); ?> تومان</del><?php endif; ?>
@@ -293,6 +304,8 @@ final class DietUp_Plugin {
                 </label>
             <?php endforeach; ?>
             </div>
+            <div class="dietup-price-summary" aria-live="polite"><div><span>قیمت پکیج انتخابی</span><strong data-dietup-base-price>—</strong></div><div class="dietup-discount-row"><span>میزان تخفیف</span><strong data-dietup-discount>۰ تومان</strong></div><div class="dietup-final-price"><span>قیمت نهایی قابل پرداخت</span><strong data-dietup-final-price>ابتدا پکیج را انتخاب کنید</strong></div></div>
+            <div class="dietup-coupon-box"><label for="dietup_coupon_input">کد تخفیف (اختیاری)</label><div class="dietup-coupon-controls"><input type="text" id="dietup_coupon_input" name="coupon_code" maxlength="80" autocomplete="off" placeholder="کد تخفیف را وارد کنید"><button type="button" data-dietup-apply-coupon>اعمال کد تخفیف</button></div><p class="dietup-coupon-message" data-dietup-coupon-message aria-live="polite">در صورت داشتن کد تخفیف، آن را وارد و اعمال کنید.</p></div>
             <label data-dietup-certificate hidden>نام و نام خانوادگی انگلیسی برای صدور گواهی *
                 <input name="certificate_name" type="text" maxlength="190" autocomplete="name" pattern="[A-Za-z .'-]+" title="لطفاً نام را با حروف انگلیسی وارد کنید">
             </label>
@@ -307,6 +320,32 @@ final class DietUp_Plugin {
         </div>
         <?php
         return ob_get_clean();
+    }
+
+    /** Validate the configured coupon and calculate all currency values as integer Toman. */
+    private function calculate_coupon($code, $base_price) {
+        $code = strtoupper(trim(sanitize_text_field((string)$code)));
+        $base_price = max(0, (int)$base_price);
+        if ('' === $code) { return array('code' => '', 'percent' => 0, 'discount' => 0, 'final' => $base_price); }
+        $settings = $this->get_settings();
+        $configured = strtoupper(trim((string)$settings['coupon_code']));
+        $percent = min(100, max(0, (int)$settings['coupon_percent']));
+        if ('' === $configured || 0 === $percent || !hash_equals($configured, $code)) { return new WP_Error('dietup_coupon_invalid', 'کد تخفیف واردشده معتبر یا فعال نیست.'); }
+        // Integer Toman arithmetic; floor prevents discount from exceeding the configured percentage.
+        $discount = (int) floor(($base_price * $percent) / 100);
+        return array('code' => $configured, 'percent' => $percent, 'discount' => min($base_price, $discount), 'final' => max(0, $base_price - $discount));
+    }
+
+    public function ajax_validate_coupon() {
+        check_ajax_referer('dietup_coupon', 'nonce');
+        $package_key = isset($_POST['package_key']) ? sanitize_key(wp_unslash($_POST['package_key'])) : '';
+        $code = isset($_POST['coupon_code']) ? sanitize_text_field(wp_unslash($_POST['coupon_code'])) : '';
+        $packages = $this->packages();
+        if (!isset($packages[$package_key])) { wp_send_json_error(array('message' => 'ابتدا یک پکیج معتبر انتخاب کنید.')); }
+        $base = (int)$packages[$package_key]['price'];
+        $result = $this->calculate_coupon($code, $base);
+        if (is_wp_error($result)) { wp_send_json_error(array('message' => $result->get_error_message())); }
+        wp_send_json_success(array('base' => $base, 'discount' => $result['discount'], 'final' => $result['final'], 'percent' => $result['percent'], 'code' => $result['code'], 'message' => $result['percent'] ? 'کد تخفیف با موفقیت اعمال شد.' : 'قیمت پکیج بدون تخفیف محاسبه شد.'));
     }
 
     private function validated_return_url($candidate = '') {
@@ -369,13 +408,17 @@ final class DietUp_Plugin {
         }
         global $wpdb;
         $p = $packages[$package_key];
+        $coupon_result = $this->calculate_coupon($get('coupon_code'), (int)$p['price']);
+        if (is_wp_error($coupon_result)) { $this->redirect_status('coupon_invalid'); }
         $data = array(
             'full_name' => $full_name, 'mobile' => $mobile, 'email' => $email,
             'return_url' => $this->validated_return_url($get('return_url')),
             'university' => $university, 'profession' => $profession, 'specialty' => $specialty_value, 'document_status' => 'pending',
             'document_rejection_reason' => '', 'certificate_status' => 'not_issued', 'workplace' => $workplace,
             'workplace_other' => ('سایر' === $workplace ? $other : null),
-            'package_key' => $package_key, 'package_price' => absint($p['price']),
+            'package_key' => $package_key, 'package_price' => (int)$coupon_result['final'],
+            'base_package_price' => (int)$p['price'], 'discount_code' => $coupon_result['code'],
+            'discount_percent' => (int)$coupon_result['percent'], 'discount_amount' => (int)$coupon_result['discount'],
             'certificate_name' => ($needs_certificate ? $certificate_name : null),
             'terms_accepted' => 1, 'payment_status' => 'pending',
             'license_status' => 'not_issued', 'access_token_hash' => hash('sha256', $access_token = bin2hex(random_bytes(32))), 'created_at' => current_time('mysql'),
@@ -469,6 +512,8 @@ final class DietUp_Plugin {
             'gateway_sandbox' => 1,
             'gateway_test_mode' => 0,
             'telegram_url' => '',
+            'coupon_code' => '',
+            'coupon_percent' => 0,
             'spotplayer_api_url' => '',
             'spotplayer_api_key' => '',
             'spotplayer_course_id' => '',
@@ -495,6 +540,9 @@ final class DietUp_Plugin {
             echo '<td><input type="number" min="0" step="1" name="packages['.esc_attr($key).'][old]" value="'.esc_attr($package['old']).'"></td>';
             echo '<td><textarea rows="4" class="large-text" name="packages['.esc_attr($key).'][features]">'.esc_textarea(implode("\n",$package['features'])).'</textarea></td></tr>';
         }
+        echo '</tbody></table><h2>کد تخفیف</h2><p>در هر زمان یک کد تخفیف فعال تعریف می‌شود. برای غیرفعال‌کردن آن، کد را خالی یا درصد را صفر کنید. تخفیف به‌صورت درصدی از قیمت پکیج انتخابی محاسبه می‌شود.</p><table class="form-table"><tbody>';
+        echo '<tr><th><label for="dietup_coupon_code">کد تخفیف</label></th><td><input class="regular-text" id="dietup_coupon_code" name="coupon_code" value="'.esc_attr($s['coupon_code']).'" maxlength="80" autocomplete="off" placeholder="مثلاً DIETUP20"></td></tr>';
+        echo '<tr><th><label for="dietup_coupon_percent">درصد تخفیف</label></th><td><input type="number" id="dietup_coupon_percent" name="coupon_percent" min="0" max="100" step="1" value="'.esc_attr((int)$s['coupon_percent']).'"> درصد <p class="description">عدد صحیح بین ۱ تا ۱۰۰؛ درصد ۱۰۰ پرداخت را صفر می‌کند.</p></td></tr>';
         echo '</tbody></table><h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
         echo '<tr><th>پرداخت آزمایشی</th><td><label><input type="checkbox" name="gateway_test_mode" value="1" '.checked(!empty($s['gateway_test_mode']), true, false).'> فعال‌سازی ثبت پرداخت موفق بدون اتصال به زیبال</label><p class="description"><strong>هشدار:</strong> در این حالت فقط مدیران سایت پرداخت شبیه‌سازی‌شده خواهند داشت؛ سایر کاربران همچنان به درگاه واقعی زیبال هدایت می‌شوند. بااین‌حال برای ثبت‌نام آزمایشی، درخواست صدور لایسنس واقعی به SpotPlayer ارسال می‌شود و ممکن است در حساب SpotPlayer شما لایسنس ثبت شود. پس از پایان تست، این گزینه را خاموش کنید.</p></td></tr>';
@@ -519,6 +567,10 @@ final class DietUp_Plugin {
         $old = $this->get_settings();
         $text_fields = array('gateway_name','gateway_merchant_id','spotplayer_course_id');
         $new = $old;
+        $new['coupon_code'] = isset($_POST['coupon_code']) ? strtoupper(trim(sanitize_text_field(wp_unslash($_POST['coupon_code'])))) : '';
+        $new['coupon_code'] = preg_replace('/[^A-Z0-9_-]/', '', $new['coupon_code']);
+        $new['coupon_percent'] = isset($_POST['coupon_percent']) ? min(100, absint($_POST['coupon_percent'])) : 0;
+        if ('' === $new['coupon_code'] || 0 === (int)$new['coupon_percent']) { $new['coupon_code'] = ''; $new['coupon_percent'] = 0; }
         foreach ($text_fields as $field) {
             $new[$field] = isset($_POST[$field]) ? sanitize_text_field(wp_unslash($_POST[$field])) : '';
         }
@@ -609,9 +661,9 @@ final class DietUp_Plugin {
         wp_nonce_field('dietup_export_xlsx', 'dietup_xlsx_nonce');
         echo '<input type="hidden" name="payment_status" value="' . esc_attr($status) . '"><input type="hidden" name="package_key" value="' . esc_attr($package) . '"><input type="hidden" name="s" value="' . esc_attr($search) . '">';
         echo '<button class="button">دریافت فایل Excel (XLSX)</button></form><p>برای جلوگیری از کندی، حداکثر ۵۰۰ رکورد در این فهرست نمایش داده می‌شود.</p>';
-        echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>تخصص / رشته</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th><th>عملیات</th></tr></thead><tbody>';
+        echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>تخصص / رشته</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ نهایی / تخفیف</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th><th>عملیات</th></tr></thead><tbody>';
         if ($rows) { foreach ($rows as $r) {
-            echo '<tr><td>'.esc_html($r->id).'</td><td><strong>'.esc_html($r->full_name).'</strong></td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->specialty).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).'</td><td><span class="dietup-admin-status">'.esc_html(('test' === $r->payment_gateway && 'paid' === $r->payment_status) ? 'موفق (آزمایشی)' : $this->payment_label($r->payment_status)).'</span></td><td><span class="dietup-admin-status">'.esc_html($this->license_label($r->license_status)).'</span>';
+            echo '<tr><td>'.esc_html($r->id).'</td><td><strong>'.esc_html($r->full_name).'</strong></td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->specialty).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).' تومان'.(!empty($r->discount_amount) ? '<br><small>تخفیف '.esc_html(number_format_i18n((int)$r->discount_amount)).' تومان ('.esc_html((int)$r->discount_percent).'٪) | '.esc_html($r->discount_code).'</small>' : '').'</td><td><span class="dietup-admin-status">'.esc_html(('test' === $r->payment_gateway && 'paid' === $r->payment_status) ? 'موفق (آزمایشی)' : $this->payment_label($r->payment_status)).'</span></td><td><span class="dietup-admin-status">'.esc_html($this->license_label($r->license_status)).'</span>';
             if ('failed' === $r->license_status && 'paid' === $r->payment_status) {
                 echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="dietup_retry_license"><input type="hidden" name="registration_id" value="' . esc_attr($r->id) . '">';
                 wp_nonce_field('dietup_retry_license_' . $r->id, 'dietup_retry_nonce');
@@ -722,7 +774,7 @@ final class DietUp_Plugin {
         $sql = "SELECT * FROM {$this->table} WHERE " . implode(' AND ', $where) . ' ORDER BY id DESC';
         $rows = $args ? $wpdb->get_results($wpdb->prepare($sql, $args), ARRAY_A) : $wpdb->get_results($sql, ARRAY_A);
 
-        $headers = array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','تخصص / رشته','محل فعالیت','توضیحات محل','پکیج','مبلغ تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت');
+        $headers = array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','تخصص / رشته','محل فعالیت','توضیحات محل','پکیج','قیمت اولیه تومان','کد تخفیف','درصد تخفیف','مبلغ تخفیف تومان','مبلغ نهایی تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت');
         $sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
         $row_number = 1;
         $sheet .= '<row r="1">';
@@ -732,13 +784,13 @@ final class DietUp_Plugin {
             $row_number++;
             $values = array(
                 $record['id'], $record['full_name'], $record['mobile'], $record['email'], $record['university'], $record['age'],
-                $record['profession'], $record['specialty'], $record['workplace'], $record['workplace_other'], $record['package_key'], $record['package_price'],
+                $record['profession'], $record['specialty'], $record['workplace'], $record['workplace_other'], $record['package_key'], ($record['base_package_price'] ?? $record['package_price']), ($record['discount_code'] ?? ''), ($record['discount_percent'] ?? 0), ($record['discount_amount'] ?? 0), $record['package_price'],
                 $record['certificate_name'], $record['payment_status'], $record['payment_ref_id'], $record['license_status'],
                 $record['created_at'], $record['paid_at']
             );
             $sheet .= '<row r="' . $row_number . '">';
             foreach ($values as $i => $value) {
-                $numeric = in_array($i, array(0, 5, 11), true);
+                $numeric = in_array($i, array(0, 5, 11, 13, 14, 15), true);
                 $sheet .= $this->xlsx_cell_xml($value, $this->xlsx_column_name($i + 1), $row_number, $numeric);
             }
             $sheet .= '</row>';
@@ -783,9 +835,9 @@ final class DietUp_Plugin {
         header('Content-Disposition: attachment; filename=dietup-registrations-'.gmdate('Y-m-d').'.csv');
         $out = fopen('php://output','w');
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','تخصص / رشته','محل فعالیت','توضیحات محل','پکیج','مبلغ تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت'));
+        fputcsv($out, array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','تخصص / رشته','محل فعالیت','توضیحات محل','پکیج','قیمت اولیه تومان','کد تخفیف','درصد تخفیف','مبلغ تخفیف تومان','مبلغ نهایی تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت'));
         foreach ($rows as $r) {
-            fputcsv($out, array($r['id'],$r['full_name'],$r['mobile'],$r['email'],$r['university'],$r['age'],$r['profession'],$r['specialty'],$r['workplace'],$r['workplace_other'],$r['package_key'],$r['package_price'],$r['certificate_name'],$r['payment_status'],$r['payment_ref_id'],$r['license_status'],$r['created_at'],$r['paid_at']));
+            fputcsv($out, array($r['id'],$r['full_name'],$r['mobile'],$r['email'],$r['university'],$r['age'],$r['profession'],$r['specialty'],$r['workplace'],$r['workplace_other'],$r['package_key'],($r['base_package_price'] ?? $r['package_price']),($r['discount_code'] ?? ''),($r['discount_percent'] ?? 0),($r['discount_amount'] ?? 0),$r['package_price'],$r['certificate_name'],$r['payment_status'],$r['payment_ref_id'],$r['license_status'],$r['created_at'],$r['paid_at']));
         }
         fclose($out); exit;
     }
