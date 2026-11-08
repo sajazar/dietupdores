@@ -78,3 +78,23 @@
 .dietup-login-card .dietup-login-button:hover{color:#fff!important;filter:brightness(1.07);transform:translateY(-2px)}
 .dietup-login-card-hint{margin:0;padding-top:15px;border-top:1px solid #edf1f4;color:#71818d;font-size:13px;line-height:2}
 @media(max-width:600px){.dietup-login-card{margin:18px auto;padding:25px 18px;border-radius:16px}.dietup-login-card h3{font-size:18px}}
+
+
+/* Coupon pricing summary */
+.dietup-price-summary{margin:20px 0 14px;padding:18px 20px;border:1px solid #d9e8ee;border-radius:16px;background:linear-gradient(145deg,#f8fcff,#f1faf8);color:#29465a}
+.dietup-price-summary>div{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:7px 0;line-height:1.9}
+.dietup-price-summary span{font-size:14px;color:#526b7c}
+.dietup-price-summary strong{font-size:15px;color:#173f59;font-weight:800}
+.dietup-price-summary .dietup-discount-row strong{color:#16836e}
+.dietup-price-summary .dietup-final-price{margin-top:8px;padding-top:13px;border-top:1px dashed #bfd4dc}
+.dietup-price-summary .dietup-final-price span,.dietup-price-summary .dietup-final-price strong{font-size:17px;color:#145b83;font-weight:900}
+.dietup-coupon-box{margin:12px 0 20px;padding:17px;border:1px solid #e1eaf0;border-radius:15px;background:#fff}
+.dietup-coupon-box>label{display:block;margin:0 0 9px;color:#29465a;font-weight:800}
+.dietup-coupon-controls{display:flex;gap:9px;align-items:stretch}
+.dietup-coupon-controls input{flex:1;min-width:0;box-sizing:border-box;padding:11px 13px;border:1px solid #cbdbe3;border-radius:10px;background:#fff;font:inherit;direction:ltr;text-align:left}
+.dietup-coupon-controls button{flex:0 0 auto;padding:10px 17px;border:0;border-radius:10px;background:#176b8d;color:#fff;font:inherit;font-weight:800;cursor:pointer}
+.dietup-coupon-controls button:disabled{opacity:.65;cursor:wait}
+.dietup-coupon-message{margin:8px 0 0;color:#687d8c;font-size:13px;line-height:1.8}
+.dietup-coupon-message.is-success{color:#16836e}
+.dietup-coupon-message.is-error{color:#b33b36}
+@media(max-width:520px){.dietup-price-summary{padding:14px}.dietup-coupon-controls{flex-direction:column}.dietup-coupon-controls button{width:100%;min-height:44px}}
