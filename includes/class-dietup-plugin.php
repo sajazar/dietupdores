@@ -435,7 +435,7 @@ final class DietUp_Plugin {
     }
 
     public function admin_menu() {
-        add_menu_page('مدیریت دایت‌آپ', 'دایت‌آپ', 'manage_options', 'dietup', array($this, 'admin_page'), 'dashicons-welcome-learn-more', 56);
+        add_menu_page('دوره‌های جامع', 'دوره‌های جامع', 'manage_options', 'dietup', array($this, 'admin_page'), 'dashicons-welcome-learn-more', 56);
         add_submenu_page('dietup', 'تنظیمات اتصال‌ها', 'تنظیمات اتصال‌ها', 'manage_options', 'dietup-settings', array($this, 'settings_page'));
         add_submenu_page('dietup', 'فایل‌های پکیج کامل', 'فایل‌های پکیج کامل', 'manage_options', 'dietup-files', array('DietUp_Private_Files', 'render_admin_page'));
         add_submenu_page('dietup', 'مدارک و گواهی کاربران', 'مدارک و گواهی کاربران', 'manage_options', 'dietup-verification', array('DietUp_Verification', 'render_admin_page'));
