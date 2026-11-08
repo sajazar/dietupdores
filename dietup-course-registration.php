@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: DietUp Course Registration
- * Description: فرم ثبت‌نام اختصاصی دوره دایت‌آپ و مدیریت ثبت‌نام‌کنندگان.
- * Version: 0.7.5
+ * Plugin Name: دوره‌های جامع
+ * Description: ثبت‌نام و مدیریت دوره‌های جامع دایت‌آپ.
+ * Version: 0.7.6
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * Author: DietUp
@@ -10,7 +10,7 @@
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('DIETUP_VERSION', '0.7.5');
+define('DIETUP_VERSION', '0.7.6');
 define('DIETUP_FILE', __FILE__);
 define('DIETUP_PATH', plugin_dir_path(__FILE__));
 define('DIETUP_URL', plugin_dir_url(__FILE__));
