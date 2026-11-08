@@ -210,6 +210,19 @@ final class DietUp_Verification {
         $wpdb->delete($table, array('registration_id' => absint($registration_id), 'document_type' => $type), array('%d','%s'));
     }
 
+    /**
+     * Permanently remove all private files and review history belonging to a registration.
+     */
+    public static function delete_registration_data($registration_id) {
+        global $wpdb;
+        $id = absint($registration_id);
+        if (!$id) { return false; }
+        self::delete_documents($id, 'qualification');
+        self::delete_documents($id, 'certificate');
+        $wpdb->delete(self::reviews_table(), array('registration_id' => $id), array('%d'));
+        return true;
+    }
+
     public static function specialties() {
         $defaults = array('متخصص تغذیه','متخصص داخلی','متخصص غدد','متخصص قلب','متخصص کودکان','متخصص جراحی','متخصص پوست','سایر تخصص‌ها');
         $saved = get_option('dietup_specialty_options', $defaults);
@@ -281,7 +294,7 @@ final class DietUp_Verification {
                 } else { echo '<p>هنوز گواهی بارگذاری نشده است.</p>'; }
                 echo '<form method="post" enctype="multipart/form-data" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_upload_certificate"><input type="hidden" name="registration_id" value="'.esc_attr($row->id).'">';
                 wp_nonce_field('dietup_upload_certificate_'.$row->id, 'dietup_certificate_nonce');
-                echo '<input type="file" name="dietup_certificate" accept=".pdf,.jpg,.jpeg,.png" required> <button class="button button-primary">بارگذاری / جایگزینی گواهی</button></form>';
+                echo '<input type="file" name="dietup_certificate" accept=".pdf,.jpg,.jpeg,.png" required> <button class="button button-primary dietup-certificate-upload-button">بارگذاری / جایگزینی گواهی</button></form>';
                 if ($cert) {
                     echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" style="margin-top:8px"><input type="hidden" name="action" value="dietup_delete_certificate"><input type="hidden" name="registration_id" value="'.esc_attr($row->id).'">';
                     wp_nonce_field('dietup_delete_certificate_'.$row->id, 'dietup_delete_certificate_nonce');
@@ -439,17 +452,17 @@ final class DietUp_Verification {
         global $wpdb;
         $status = $registration->document_status ?? 'pending';
         $labels = array('pending'=>'در انتظار بررسی','approved'=>'مدرک تأیید شده','rejected'=>'مدرک رد شده','needs_revision'=>'نیازمند اصلاح مدرک');
-        echo '<div class="dietup-verification-account"><p><strong>گروه حرفه‌ای:</strong> '.esc_html($registration->profession).' | <strong>تخصص / رشته:</strong> '.esc_html($registration->specialty ?? '').'</p><p><strong>وضعیت مدرک:</strong> '.esc_html($labels[$status] ?? $status).'</p>';
+        echo '<div class="dietup-verification-account"><div class="dietup-verification-heading">اطلاعات و مدارک تخصصی</div><p><strong>گروه حرفه‌ای:</strong> '.esc_html($registration->profession).' | <strong>تخصص / رشته:</strong> '.esc_html($registration->specialty ?? '').'</p><p><strong>وضعیت مدرک:</strong> '.esc_html($labels[$status] ?? $status).'</p>';
         if (in_array($status, array('rejected','needs_revision'), true)) {
             echo '<p>توضیح مدیریت: '.esc_html($registration->document_rejection_reason ?? '').'</p>';
             echo '<form method="post" enctype="multipart/form-data" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_resubmit_documents"><input type="hidden" name="registration_id" value="'.esc_attr($registration->id).'">';
             wp_nonce_field('dietup_resubmit_documents_'.$registration->id, 'dietup_resubmit_nonce');
-            echo '<label>بارگذاری مجدد مدارک (حداکثر ۵ فایل، هر فایل ۵ مگابایت) <input type="file" name="dietup_documents[]" accept=".pdf,.jpg,.jpeg,.png" multiple required></label><button type="submit">ارسال مدارک اصلاح‌شده</button></form>';
+            echo '<label>بارگذاری مجدد مدارک (حداکثر ۵ فایل، هر فایل ۵ مگابایت) <input type="file" name="dietup_documents[]" accept=".pdf,.jpg,.jpeg,.png" multiple required></label><button class="dietup-resubmit-button" type="submit">ارسال مدارک اصلاح‌شده</button></form>';
         }
         if ('paid' === $registration->payment_status && in_array($registration->package_key, array('certificate','complete'), true)) {
             $certificate_status = $registration->certificate_status ?? 'not_issued';
             if (in_array($certificate_status, array('available','delivered'), true)) {
-                echo '<p><strong>گواهی اختصاصی شما آماده است.</strong></p><p><a href="'.esc_url(self::account_certificate_url($registration->id, true)).'" target="_blank" rel="noopener">مشاهده و چاپ گواهی</a> | <a href="'.esc_url(self::account_certificate_url($registration->id, false)).'">دانلود گواهی</a></p>';
+                echo '<p><strong>گواهی اختصاصی شما آماده است.</strong></p><p><a href="'.esc_url(self::account_certificate_url($registration->id, true)).'" target="_blank" rel="noopener" class="dietup-certificate-view">مشاهده و چاپ گواهی</a> <a href="'.esc_url(self::account_certificate_url($registration->id, false)).'" class="dietup-certificate-download">دانلود گواهی</a></p>';
             } else {
                 echo '<p>گواهی اختصاصی شما هنوز بارگذاری نشده است.</p>';
             }
