@@ -389,7 +389,7 @@ final class DietUp_Plugin {
             $this->redirect_status('error');
         }
         $settings = $this->get_settings();
-        // Simulated payment is restricted to administrators, but SpotPlayer issuance is real only for explicitly enabled packages.
+        // Simulated payment is restricted to administrators; every paid package receives its own SpotPlayer license.
         if (!empty($settings['gateway_test_mode']) && current_user_can('manage_options')) {
             $wpdb->update($this->table, array(
                 'payment_status' => 'paid',
@@ -400,11 +400,7 @@ final class DietUp_Plugin {
                 'updated_at' => current_time('mysql'),
             ), array('id' => $registration_id));
 
-            // Never issue a license for a package that is not explicitly enabled.
-            if (!DietUp_Integrations::spotplayer_package_enabled($package_key)) {
-                $wpdb->update($this->table, array('license_status' => 'not_issued', 'updated_at' => current_time('mysql')), array('id' => $registration_id));
-            } else {
-            // Claim the issuance atomically so refreshes/concurrent requests cannot create duplicates.
+            // Claim issuance atomically; package visibility settings do not restrict license creation.
             $claimed = $wpdb->query($wpdb->prepare(
                 "UPDATE {$this->table} SET license_status = 'issuing', updated_at = %s WHERE id = %d AND payment_status = 'paid' AND payment_gateway = 'test' AND license_status = 'pending'",
                 current_time('mysql'), $registration_id
