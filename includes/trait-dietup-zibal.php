@@ -47,7 +47,9 @@ trait DietUp_Zibal_Trait {
             }
             if (!in_array((int)($verified['result'] ?? 0), array(100, 201), true)) {
                 $wpdb->update($this->table, array('payment_status' => 'failed', 'updated_at' => current_time('mysql')), array('id' => $row->id, 'payment_status' => 'pending'));
-                wp_die('زیبال پرداخت را تأیید نکرده است. اگر وجه کسر شده است با پشتیبانی تماس بگیرید.');
+                $return_url = !empty($row->return_url) ? $row->return_url : home_url('/');
+                wp_safe_redirect(add_query_arg(array('dietup_status'=>'cancelled','dietup_payment'=>'cancelled','dietup_access'=>$access_token), $return_url));
+                exit;
             }
             if ((int)($verified['amount'] ?? 0) !== ((int)$row->package_price * 10)) {
                 wp_die('مبلغ تأییدشده با مبلغ سفارش مطابقت ندارد. برای بررسی با پشتیبانی تماس بگیرید.');
@@ -84,45 +86,16 @@ trait DietUp_Zibal_Trait {
             }
         }
         $token = isset($_GET['dietup_access']) ? sanitize_text_field(wp_unslash($_GET['dietup_access'])) : '';
-        if ($token && preg_match('/^[a-f0-9]{64}$/', $token)) {
-            wp_safe_redirect(add_query_arg('dietup_access', $token, home_url('/')));
-        } else {
-            wp_safe_redirect(home_url('/'));
-        }
+        $return_url = !empty($row->return_url) ? wp_validate_redirect($row->return_url, home_url('/')) : home_url('/');
+        $home_host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+        $return_host = strtolower((string) wp_parse_url($return_url, PHP_URL_HOST));
+        if (!$return_host || $return_host !== $home_host) { $return_url = home_url('/'); }
+        wp_safe_redirect(add_query_arg(array('dietup_payment'=>'success','dietup_access'=>$token), $return_url));
         exit;
     }
 
     public function render_access_page() {
-        if (empty($_GET['dietup_access'])) { return; }
-        $token = sanitize_text_field(wp_unslash($_GET['dietup_access']));
-        if (!preg_match('/^[a-f0-9]{64}$/', $token)) { status_header(404); exit; }
-        global $wpdb;
-        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE access_token_hash = %s LIMIT 1", hash('sha256', $token)));
-        if (!$row || 'paid' !== $row->payment_status) { status_header(404); exit; }
-        nocache_headers();
-        header('Content-Type: text/html; charset=' . get_bloginfo('charset'));
-        echo '<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>دریافت دسترسی دایت‌آپ</title><body style="font-family:sans-serif;max-width:720px;margin:40px auto;padding:20px">';
-        echo '<h1>وضعیت ثبت‌نام دایت‌آپ</h1><p>نام: ' . esc_html($row->full_name) . '</p>';
-        if ('issued' === $row->license_status && $row->license_key) {
-            echo '<h2>کلید لایسنس SpotPlayer</h2><textarea readonly style="width:100%;min-height:120px;direction:ltr">' . esc_textarea($row->license_key) . '</textarea>';
-            echo '<p>این کلید را کپی کرده و در نرم‌افزار SpotPlayer وارد کنید.</p>';
-        } elseif ('unknown' === $row->license_status) {
-            echo '<p>پرداخت تأیید شده است، اما پاسخ سرویس صدور لایسنس نامشخص بوده است. برای جلوگیری از صدور تکراری، درخواست خودکار دوباره ارسال نمی‌شود. لطفاً با پشتیبانی تماس بگیرید تا وضعیت در پنل SpotPlayer بررسی شود.</p>';
-        } else {
-            echo '<p>پرداخت شما تأیید شده است، اما صدور لایسنس هنوز تکمیل نشده. لطفاً بعداً همین لینک را دوباره باز کنید یا با پشتیبانی تماس بگیرید.</p>';
-        }
-        if ('complete' === $row->package_key) {
-            $resources = DietUp_Private_Files::resources();
-            echo '<h2>دریافت فایل‌های پکیج کامل</h2>';
-            foreach (array('video' => 'دریافت ویدئوی آفلاین دوره', 'booklet' => 'دریافت جزوه دوره') as $type => $label) {
-                if (!empty($resources[$type]['path']) && is_file($resources[$type]['path'])) {
-                    echo '<p><a href="' . esc_url(DietUp_Private_Files::download_url($type, $token)) . '">' . esc_html($label) . '</a></p>';
-                } else {
-                    echo '<p>' . esc_html($label) . ': فایل هنوز توسط مدیریت بارگذاری نشده است.</p>';
-                }
-            }
-        }
-        echo '</body></html>';
-        exit;
+        // Registration access details are displayed by the shortcode on the original form page.
+        return;
     }
 }
