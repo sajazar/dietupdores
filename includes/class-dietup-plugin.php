@@ -420,7 +420,6 @@ final class DietUp_Plugin {
                     ), array('id' => $registration_id));
                 }
             }
-            }
 
             $return_url = $this->validated_return_url($data['return_url']);
             wp_safe_redirect(add_query_arg(array(
