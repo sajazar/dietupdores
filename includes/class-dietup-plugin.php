@@ -542,7 +542,7 @@ final class DietUp_Plugin {
         }
         echo '</tbody></table><h2>کد تخفیف</h2><p>در هر زمان یک کد تخفیف فعال تعریف می‌شود. برای غیرفعال‌کردن آن، کد را خالی یا درصد را صفر کنید. تخفیف به‌صورت درصدی از قیمت پکیج انتخابی محاسبه می‌شود.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_coupon_code">کد تخفیف</label></th><td><input class="regular-text" id="dietup_coupon_code" name="coupon_code" value="'.esc_attr($s['coupon_code']).'" maxlength="80" autocomplete="off" placeholder="مثلاً DIETUP20"></td></tr>';
-        echo '<tr><th><label for="dietup_coupon_percent">درصد تخفیف</label></th><td><input type="number" id="dietup_coupon_percent" name="coupon_percent" min="0" max="99" step="1" value="'.esc_attr((int)$s['coupon_percent']).'"> درصد <p class="description">عدد صحیح بین ۱ تا ۱۰۰؛ درصد ۱۰۰ پرداخت را صفر می‌کند.</p></td></tr>';
+        echo '<tr><th><label for="dietup_coupon_percent">درصد تخفیف</label></th><td><input type="number" id="dietup_coupon_percent" name="coupon_percent" min="0" max="99" step="1" value="'.esc_attr((int)$s['coupon_percent']).'"> درصد <p class="description">عدد صحیح بین ۱ تا ۹۹؛ برای جلوگیری از ایجاد سفارش با مبلغ صفر، تخفیف ۱۰۰ درصدی پذیرفته نمی‌شود.</p></td></tr>';
         echo '</tbody></table><h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
         echo '<tr><th>پرداخت آزمایشی</th><td><label><input type="checkbox" name="gateway_test_mode" value="1" '.checked(!empty($s['gateway_test_mode']), true, false).'> فعال‌سازی ثبت پرداخت موفق بدون اتصال به زیبال</label><p class="description"><strong>هشدار:</strong> در این حالت فقط مدیران سایت پرداخت شبیه‌سازی‌شده خواهند داشت؛ سایر کاربران همچنان به درگاه واقعی زیبال هدایت می‌شوند. بااین‌حال برای ثبت‌نام آزمایشی، درخواست صدور لایسنس واقعی به SpotPlayer ارسال می‌شود و ممکن است در حساب SpotPlayer شما لایسنس ثبت شود. پس از پایان تست، این گزینه را خاموش کنید.</p></td></tr>';
@@ -672,7 +672,7 @@ final class DietUp_Plugin {
             echo '</td><td>'.esc_html($r->created_at).'</td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'" onsubmit="return confirm(\'هشدار: تمام اطلاعات ثبت‌نام، مدارک، گواهی و سوابق این فرد از دایت‌آپ برای همیشه حذف می‌شود. این کار قابل بازگشت نیست. ادامه می‌دهید؟\')"><input type="hidden" name="action" value="dietup_delete_registration"><input type="hidden" name="registration_id" value="'.esc_attr($r->id).'">';
             wp_nonce_field('dietup_delete_registration_'.$r->id, 'dietup_delete_registration_nonce');
             echo '<button type="submit" class="button button-small dietup-delete-registration">حذف کامل</button></form></td></tr>';
-        }} else { echo '<tr><td colspan="13">رکوردی مطابق فیلترها پیدا نشد.</td></tr>'; }
+        }} else { echo '<tr><td colspan="14">رکوردی مطابق فیلترها پیدا نشد.</td></tr>'; }
         echo '</tbody></table></div>';
     }
 
@@ -784,7 +784,7 @@ final class DietUp_Plugin {
             $row_number++;
             $values = array(
                 $record['id'], $record['full_name'], $record['mobile'], $record['email'], $record['university'], $record['age'],
-                $record['profession'], $record['specialty'], $record['workplace'], $record['workplace_other'], $record['package_key'], ($record['base_package_price'] ?? $record['package_price']), ($record['discount_code'] ?? ''), ($record['discount_percent'] ?? 0), ($record['discount_amount'] ?? 0), $record['package_price'],
+                $record['profession'], $record['specialty'], $record['workplace'], $record['workplace_other'], $record['package_key'], (!empty($record['base_package_price']) ? $record['base_package_price'] : $record['package_price']), ($record['discount_code'] ?? ''), ($record['discount_percent'] ?? 0), ($record['discount_amount'] ?? 0), $record['package_price'],
                 $record['certificate_name'], $record['payment_status'], $record['payment_ref_id'], $record['license_status'],
                 $record['created_at'], $record['paid_at']
             );
@@ -837,7 +837,7 @@ final class DietUp_Plugin {
         fwrite($out, "\xEF\xBB\xBF");
         fputcsv($out, array('شناسه','نام و نام خانوادگی','موبایل','ایمیل','دانشگاه','سن','گروه حرفه‌ای','تخصص / رشته','محل فعالیت','توضیحات محل','پکیج','قیمت اولیه تومان','کد تخفیف','درصد تخفیف','مبلغ تخفیف تومان','مبلغ نهایی تومان','نام انگلیسی گواهی','وضعیت پرداخت','شناسه پیگیری پرداخت','وضعیت لایسنس','تاریخ ثبت','تاریخ پرداخت'));
         foreach ($rows as $r) {
-            fputcsv($out, array($r['id'],$r['full_name'],$r['mobile'],$r['email'],$r['university'],$r['age'],$r['profession'],$r['specialty'],$r['workplace'],$r['workplace_other'],$r['package_key'],($r['base_package_price'] ?? $r['package_price']),($r['discount_code'] ?? ''),($r['discount_percent'] ?? 0),($r['discount_amount'] ?? 0),$r['package_price'],$r['certificate_name'],$r['payment_status'],$r['payment_ref_id'],$r['license_status'],$r['created_at'],$r['paid_at']));
+            fputcsv($out, array($r['id'],$r['full_name'],$r['mobile'],$r['email'],$r['university'],$r['age'],$r['profession'],$r['specialty'],$r['workplace'],$r['workplace_other'],$r['package_key'],(!empty($r['base_package_price']) ? $r['base_package_price'] : $r['package_price']),($r['discount_code'] ?? ''),($r['discount_percent'] ?? 0),($r['discount_amount'] ?? 0),$r['package_price'],$r['certificate_name'],$r['payment_status'],$r['payment_ref_id'],$r['license_status'],$r['created_at'],$r['paid_at']));
         }
         fclose($out); exit;
     }
