@@ -195,6 +195,9 @@ final class DietUp_Plugin {
             }
         } elseif (isset($_GET['dietup_payment']) && 'success' === sanitize_key(wp_unslash($_GET['dietup_payment']))) {
             echo '<div class="dietup-notice success">پرداخت شما با موفقیت تأیید شد. مشخصات ثبت‌نام و دسترسی دوره در همین صفحه نمایش داده شده است.</div>';
+            if (isset($_GET['dietup_test']) && '1' === sanitize_text_field(wp_unslash($_GET['dietup_test']))) {
+                echo '<div class="dietup-notice">این ثبت‌نام با پرداخت شبیه‌سازی‌شده ثبت شده است؛ هیچ مبلغی دریافت نشده و لایسنس واقعی SpotPlayer صادر نشده است.</div>';
+            }
         }
         $has_paid_registration_result = false;
         $access_token = isset($_GET['dietup_access']) ? sanitize_text_field(wp_unslash($_GET['dietup_access'])) : '';
@@ -379,6 +382,26 @@ final class DietUp_Plugin {
             $wpdb->delete($this->table, array('id' => $registration_id), array('%d'));
             $this->redirect_status('error');
         }
+        $settings = $this->get_settings();
+        // Simulated payments are restricted to administrators to prevent public free access.
+        if (!empty($settings['gateway_test_mode']) && current_user_can('manage_options')) {
+            $wpdb->update($this->table, array(
+                'payment_status' => 'paid',
+                'payment_gateway' => 'test',
+                'payment_ref_id' => 'TEST-' . $registration_id,
+                'paid_at' => current_time('mysql'),
+                'license_status' => 'not_issued',
+                'updated_at' => current_time('mysql'),
+            ), array('id' => $registration_id));
+            $return_url = $this->validated_return_url($data['return_url']);
+            wp_safe_redirect(add_query_arg(array(
+                'dietup_payment' => 'success',
+                'dietup_test' => '1',
+                'dietup_access' => $access_token,
+            ), $return_url));
+            exit;
+        }
+
         $this->start_zibal_payment($registration_id, $access_token);
     }
 
@@ -401,6 +424,7 @@ final class DietUp_Plugin {
             'gateway_payment_url' => 'https://gateway.zibal.ir/v1/request',
             'gateway_verify_url' => 'https://gateway.zibal.ir/v1/verify',
             'gateway_sandbox' => 1,
+            'gateway_test_mode' => 0,
             'telegram_url' => '',
             'spotplayer_api_url' => '',
             'spotplayer_api_key' => '',
@@ -430,6 +454,7 @@ final class DietUp_Plugin {
         }
         echo '</tbody></table><h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
+        echo '<tr><th>پرداخت آزمایشی</th><td><label><input type="checkbox" name="gateway_test_mode" value="1" '.checked(!empty($s['gateway_test_mode']), true, false).'> فعال‌سازی ثبت پرداخت موفق بدون اتصال به زیبال</label><p class="description"><strong>هشدار:</strong> در این حالت فقط مدیران سایت پرداخت آزمایشی خواهند داشت؛ سایر کاربران همچنان به درگاه واقعی زیبال هدایت می‌شوند. برای پرداخت آزمایشی هیچ لایسنس واقعی SpotPlayer صادر نمی‌شود. پس از پایان تست، این گزینه را خاموش کنید.</p></td></tr>';
         echo '<tr><th><label for="dietup_telegram_url">لینک تلگرام دوره</label></th><td><input class="regular-text" type="url" id="dietup_telegram_url" name="telegram_url" value="' . esc_attr($s['telegram_url']) . '" placeholder="https://t.me/..."><p class="description">این لینک در پنل ثبت‌نام‌کنندگان پرداخت‌شده نمایش داده می‌شود.</p></td></tr>';
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_spotplayer_api_key">API Key</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_spotplayer_api_key" name="spotplayer_api_key" value="" placeholder="'.($s['spotplayer_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'SpotPlayer API Key').'"><p class="description">کلید فعلی نمایش داده نمی‌شود.</p>'.($s['spotplayer_api_key'] ? '<label><input type="checkbox" name="clear_spotplayer_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
@@ -460,6 +485,7 @@ final class DietUp_Plugin {
             $new[$field] = ('' === $raw || 'https' === wp_parse_url($raw, PHP_URL_SCHEME)) ? $raw : '';
         }
         $new['gateway_sandbox'] = isset($_POST['gateway_sandbox']) ? 1 : 0;
+        $new['gateway_test_mode'] = isset($_POST['gateway_test_mode']) ? 1 : 0;
         $visible_packages = isset($_POST['spotplayer_visible_packages']) && is_array($_POST['spotplayer_visible_packages']) ? array_map('sanitize_key', wp_unslash($_POST['spotplayer_visible_packages'])) : array();
         $new['spotplayer_visible_packages'] = array_values(array_intersect(array('online','certificate','complete'), $visible_packages));
         $package_input = isset($_POST['packages']) && is_array($_POST['packages']) ? wp_unslash($_POST['packages']) : array();
