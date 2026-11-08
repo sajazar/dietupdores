@@ -106,9 +106,9 @@ final class DietUp_Plugin {
         $new_items = array();
         foreach ($items as $key => $label) {
             $new_items[$key] = $label;
-            if ('orders' === $key) { $new_items['dietup-courses'] = 'دوره‌های دایت‌آپ من'; }
+            if ('orders' === $key) { $new_items['dietup-courses'] = 'دوره‌های جامع'; }
         }
-        if (!isset($new_items['dietup-courses'])) { $new_items['dietup-courses'] = 'دوره‌های دایت‌آپ من'; }
+        if (!isset($new_items['dietup-courses'])) { $new_items['dietup-courses'] = 'دوره‌های جامع'; }
         return $new_items;
     }
 
@@ -118,7 +118,7 @@ final class DietUp_Plugin {
         $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$this->table} WHERE user_id = %d ORDER BY id DESC LIMIT 100", get_current_user_id()));
         $settings = $this->get_settings();
         $telegram = $settings['telegram_url'];
-        echo '<div class="dietup-account-courses" dir="rtl"><h2>دوره‌های دایت‌آپ من</h2>';
+        echo '<div class="dietup-account-courses" dir="rtl"><h2>دوره‌های جامع</h2>';
         if (!$rows) { echo '<p>هنوز ثبت‌نامی به حساب کاربری شما متصل نشده است.</p></div>'; return; }
         foreach ($rows as $row) {
             $package = $this->packages()[$row->package_key]['title'] ?? $row->package_key;
