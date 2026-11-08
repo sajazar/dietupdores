@@ -598,7 +598,7 @@ final class DietUp_Plugin {
         echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>تخصص / رشته</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th><th>عملیات</th></tr></thead><tbody>';
         if ($rows) { foreach ($rows as $r) {
             echo '<tr><td>'.esc_html($r->id).'</td><td><strong>'.esc_html($r->full_name).'</strong></td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->specialty).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).'</td><td><span class="dietup-admin-status">'.esc_html(('test' === $r->payment_gateway && 'paid' === $r->payment_status) ? 'موفق (آزمایشی)' : $this->payment_label($r->payment_status)).'</span></td><td><span class="dietup-admin-status">'.esc_html($this->license_label($r->license_status)).'</span>';
-            if ('failed' === $r->license_status && 'paid' === $r->payment_status && DietUp_Integrations::spotplayer_package_enabled($r->package_key)) {
+            if ('failed' === $r->license_status && 'paid' === $r->payment_status) {
                 echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="dietup_retry_license"><input type="hidden" name="registration_id" value="' . esc_attr($r->id) . '">';
                 wp_nonce_field('dietup_retry_license_' . $r->id, 'dietup_retry_nonce');
                 echo '<button class="button button-small">تلاش مجدد صدور لایسنس</button></form>';
@@ -638,7 +638,7 @@ final class DietUp_Plugin {
         }
         global $wpdb;
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $id));
-        if (!$row || 'paid' !== $row->payment_status || 'failed' !== $row->license_status || !DietUp_Integrations::spotplayer_package_enabled($row->package_key)) {
+        if (!$row || 'paid' !== $row->payment_status || 'failed' !== $row->license_status) {
             wp_die('این ثبت‌نام واجد شرایط تلاش مجدد امن نیست. وضعیت‌های نامشخص باید ابتدا در پنل SpotPlayer بررسی شوند.');
         }
         $claimed = $wpdb->query($wpdb->prepare(
