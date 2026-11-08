@@ -63,7 +63,12 @@ trait DietUp_Zibal_Trait {
             $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $row->id));
         }
 
-        if ('paid' === $row->payment_status && 'pending' === $row->license_status) {
+        if ('paid' === $row->payment_status && 'pending' === $row->license_status && !DietUp_Integrations::spotplayer_package_enabled($row->package_key)) {
+            $wpdb->update($this->table, array('license_status' => 'not_issued', 'updated_at' => current_time('mysql')), array('id' => $row->id, 'license_status' => 'pending'));
+            $row->license_status = 'not_issued';
+        }
+
+        if ('paid' === $row->payment_status && 'pending' === $row->license_status && DietUp_Integrations::spotplayer_package_enabled($row->package_key)) {
             // Prevent concurrent callbacks from issuing duplicate licenses.
             $claimed = $wpdb->query($wpdb->prepare(
                 "UPDATE {$this->table} SET license_status = 'issuing', updated_at = %s WHERE id = %d AND license_status = 'pending'",
