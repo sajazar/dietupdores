@@ -84,13 +84,20 @@ final class DietUp_Plugin {
         ) {$charset};";
         dbDelta($sql);
         DietUp_Verification::install();
-        add_rewrite_endpoint('dietup-courses', EP_ROOT | EP_PAGES);
-        flush_rewrite_rules();
+
+        // Rewrite endpoints are registered on init, when WP_Rewrite is available.
+        // Flush once on the next init after activation or a database upgrade.
+        update_option('dietup_rewrite_flush', '1', false);
         update_option('dietup_db_version', DIETUP_VERSION);
     }
 
     public function register_account_endpoint() {
         add_rewrite_endpoint('dietup-courses', EP_ROOT | EP_PAGES);
+
+        if ('1' === (string) get_option('dietup_rewrite_flush')) {
+            flush_rewrite_rules(false);
+            delete_option('dietup_rewrite_flush');
+        }
     }
 
     public function account_menu_items($items) {
