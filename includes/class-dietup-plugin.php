@@ -128,7 +128,8 @@ final class DietUp_Plugin {
             if ('paid' === $row->payment_status) {
                 echo '<p>وضعیت لایسنس: ' . esc_html($this->license_label($row->license_status)) . '</p>';
                 if ('issued' === $row->license_status && $row->license_key && in_array($row->package_key, (array)$settings['spotplayer_visible_packages'], true)) { echo '<label>کلید لایسنس SpotPlayer</label><textarea readonly style="width:100%;min-height:90px;direction:ltr">' . esc_textarea($row->license_key) . '</textarea>'; }
-                elseif ('unknown' === $row->license_status) { echo '<p>صدور لایسنس نیازمند بررسی پشتیبانی است.</p>'; }
+                elseif ('failed' === $row->license_status) { echo '<p>صدور لایسنس ناموفق بود؛ لطفاً با پشتیبانی تماس بگیرید.</p>'; }
+                elseif ('unknown' === $row->license_status) { echo '<p>نتیجه صدور لایسنس نیازمند بررسی دستی در پنل SpotPlayer است.</p>'; }
                 if ('complete' === $row->package_key) {
                     $resources = DietUp_Private_Files::resources();
                     if (!empty($resources['booklet']['path']) && is_file($resources['booklet']['path'])) { echo '<p><a href="' . esc_url(DietUp_Private_Files::account_download_url((int)$row->id, 'booklet')) . '">دانلود جزوه دوره (PDF)</a></p>'; }
@@ -196,7 +197,7 @@ final class DietUp_Plugin {
         } elseif (isset($_GET['dietup_payment']) && 'success' === sanitize_key(wp_unslash($_GET['dietup_payment']))) {
             echo '<div class="dietup-notice success">پرداخت شما با موفقیت تأیید شد. مشخصات ثبت‌نام و دسترسی دوره در همین صفحه نمایش داده شده است.</div>';
             if (isset($_GET['dietup_test']) && '1' === sanitize_text_field(wp_unslash($_GET['dietup_test']))) {
-                echo '<div class="dietup-notice">این ثبت‌نام با پرداخت شبیه‌سازی‌شده ثبت شده است؛ هیچ مبلغی دریافت نشده و لایسنس واقعی SpotPlayer صادر نشده است.</div>';
+                echo '<div class="dietup-notice">پرداخت این ثبت‌نام شبیه‌سازی شده و مبلغی دریافت نشده است؛ اما درخواست صدور لایسنس واقعی به SpotPlayer ارسال شده است. وضعیت صدور را در مشخصات ثبت‌نام بررسی کنید.</div>';
             }
         }
         $has_paid_registration_result = false;
@@ -215,8 +216,10 @@ final class DietUp_Plugin {
                     echo '<h3>مشخصات دوره</h3><ul>';
                     foreach ((array)($package['features'] ?? array()) as $feature) { echo '<li>'.esc_html($feature).'</li>'; }
                     echo '</ul>';
+                    echo '<p><strong>وضعیت لایسنس SpotPlayer:</strong> '.esc_html($this->license_label($registration->license_status)).'</p>';
                     if ('issued' === $registration->license_status && $registration->license_key) { echo '<p>کلید SpotPlayer:</p><textarea readonly style="width:100%;min-height:90px;direction:ltr">'.esc_textarea($registration->license_key).'</textarea>'; }
-                    elseif ('unknown' === $registration->license_status) { echo '<p>صدور لایسنس نیازمند بررسی پشتیبانی است.</p>'; }
+                    elseif ('failed' === $registration->license_status) { echo '<p>صدور لایسنس ناموفق بود. تنظیمات API و شناسه دوره SpotPlayer را بررسی کنید؛ سپس از پنل مدیریت تلاش مجدد را بزنید.</p>'; }
+                    elseif ('unknown' === $registration->license_status) { echo '<p>نتیجه درخواست صدور قطعی نیست؛ برای جلوگیری از صدور تکراری، ابتدا پنل SpotPlayer را بررسی کنید.</p>'; }
                     elseif ('pending' === $registration->license_status || 'issuing' === $registration->license_status) { echo '<p>صدور دسترسی در حال تکمیل است.</p>'; }
                     if ('complete' === $registration->package_key) {
                         $resources = DietUp_Private_Files::resources();
@@ -383,16 +386,38 @@ final class DietUp_Plugin {
             $this->redirect_status('error');
         }
         $settings = $this->get_settings();
-        // Simulated payments are restricted to administrators to prevent public free access.
+        // Simulated payment is restricted to administrators, but SpotPlayer issuance is real.
         if (!empty($settings['gateway_test_mode']) && current_user_can('manage_options')) {
             $wpdb->update($this->table, array(
                 'payment_status' => 'paid',
                 'payment_gateway' => 'test',
                 'payment_ref_id' => 'TEST-' . $registration_id,
                 'paid_at' => current_time('mysql'),
-                'license_status' => 'not_issued',
+                'license_status' => 'pending',
                 'updated_at' => current_time('mysql'),
             ), array('id' => $registration_id));
+
+            // Claim the issuance atomically so refreshes/concurrent requests cannot create duplicates.
+            $claimed = $wpdb->query($wpdb->prepare(
+                "UPDATE {$this->table} SET license_status = 'issuing', updated_at = %s WHERE id = %d AND payment_status = 'paid' AND payment_gateway = 'test' AND license_status = 'pending'",
+                current_time('mysql'), $registration_id
+            ));
+            if (1 === (int)$claimed) {
+                $registration = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $registration_id));
+                $license = $registration ? DietUp_Integrations::spotplayer_license($registration) : new WP_Error('dietup_spot_registration', 'اطلاعات ثبت‌نام برای صدور لایسنس پیدا نشد.');
+                if (is_wp_error($license)) {
+                    $license_state = ('dietup_spot_config' === $license->get_error_code()) ? 'failed' : 'unknown';
+                    $wpdb->update($this->table, array('license_status' => $license_state, 'updated_at' => current_time('mysql')), array('id' => $registration_id));
+                } else {
+                    $wpdb->update($this->table, array(
+                        'license_status' => 'issued',
+                        'license_id' => $license['id'],
+                        'license_key' => $license['key'],
+                        'updated_at' => current_time('mysql'),
+                    ), array('id' => $registration_id));
+                }
+            }
+
             $return_url = $this->validated_return_url($data['return_url']);
             wp_safe_redirect(add_query_arg(array(
                 'dietup_payment' => 'success',
@@ -454,7 +479,7 @@ final class DietUp_Plugin {
         }
         echo '</tbody></table><h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
-        echo '<tr><th>پرداخت آزمایشی</th><td><label><input type="checkbox" name="gateway_test_mode" value="1" '.checked(!empty($s['gateway_test_mode']), true, false).'> فعال‌سازی ثبت پرداخت موفق بدون اتصال به زیبال</label><p class="description"><strong>هشدار:</strong> در این حالت فقط مدیران سایت پرداخت آزمایشی خواهند داشت؛ سایر کاربران همچنان به درگاه واقعی زیبال هدایت می‌شوند. برای پرداخت آزمایشی هیچ لایسنس واقعی SpotPlayer صادر نمی‌شود. پس از پایان تست، این گزینه را خاموش کنید.</p></td></tr>';
+        echo '<tr><th>پرداخت آزمایشی</th><td><label><input type="checkbox" name="gateway_test_mode" value="1" '.checked(!empty($s['gateway_test_mode']), true, false).'> فعال‌سازی ثبت پرداخت موفق بدون اتصال به زیبال</label><p class="description"><strong>هشدار:</strong> در این حالت فقط مدیران سایت پرداخت شبیه‌سازی‌شده خواهند داشت؛ سایر کاربران همچنان به درگاه واقعی زیبال هدایت می‌شوند. بااین‌حال برای ثبت‌نام آزمایشی، درخواست صدور لایسنس واقعی به SpotPlayer ارسال می‌شود و ممکن است در حساب SpotPlayer شما لایسنس ثبت شود. پس از پایان تست، این گزینه را خاموش کنید.</p></td></tr>';
         echo '<tr><th><label for="dietup_telegram_url">لینک تلگرام دوره</label></th><td><input class="regular-text" type="url" id="dietup_telegram_url" name="telegram_url" value="' . esc_attr($s['telegram_url']) . '" placeholder="https://t.me/..."><p class="description">این لینک در پنل ثبت‌نام‌کنندگان پرداخت‌شده نمایش داده می‌شود.</p></td></tr>';
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_spotplayer_api_key">API Key</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_spotplayer_api_key" name="spotplayer_api_key" value="" placeholder="'.($s['spotplayer_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'SpotPlayer API Key').'"><p class="description">کلید فعلی نمایش داده نمی‌شود.</p>'.($s['spotplayer_api_key'] ? '<label><input type="checkbox" name="clear_spotplayer_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
