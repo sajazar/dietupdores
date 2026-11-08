@@ -189,11 +189,13 @@ final class DietUp_Plugin {
         } elseif (isset($_GET['dietup_payment']) && 'success' === sanitize_key(wp_unslash($_GET['dietup_payment']))) {
             echo '<div class="dietup-notice success">پرداخت شما با موفقیت تأیید شد. مشخصات ثبت‌نام و دسترسی دوره در همین صفحه نمایش داده شده است.</div>';
         }
+        $has_paid_registration_result = false;
         $access_token = isset($_GET['dietup_access']) ? sanitize_text_field(wp_unslash($_GET['dietup_access'])) : '';
         if ($access_token && preg_match('/^[a-f0-9]{64}$/', $access_token)) {
             global $wpdb;
             $registration = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE access_token_hash=%s LIMIT 1", hash('sha256', $access_token)));
             if ($registration && (int)$registration->user_id === get_current_user_id()) {
+                $has_paid_registration_result = ('paid' === $registration->payment_status);
                 $package = $this->packages()[$registration->package_key] ?? array('title'=>$registration->package_key,'features'=>array());
                 echo '<section class="dietup-payment-result"><h2>نتیجه ثبت‌نام و پرداخت</h2>';
                 echo '<p><strong>نام:</strong> '.esc_html($registration->full_name).'</p><p><strong>شماره ثبت‌نام:</strong> '.esc_html($registration->id).'</p>';
@@ -219,6 +221,7 @@ final class DietUp_Plugin {
                 echo '</section>';
             }
         }
+        if (!$has_paid_registration_result) :
         ?>
         <form class="dietup-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <input type="hidden" name="action" value="dietup_register">
@@ -281,7 +284,9 @@ final class DietUp_Plugin {
             </fieldset>
             <button type="submit">ثبت اطلاعات و ادامه</button>
             <p class="dietup-small">پس از ثبت اطلاعات، وضعیت پرداخت و صدور دسترسی فقط پس از تأیید سرور درگاه اعلام می‌شود.</p>
-        </form></div>
+        </form>
+        <?php endif; ?>
+        </div>
         <?php
         return ob_get_clean();
     }
