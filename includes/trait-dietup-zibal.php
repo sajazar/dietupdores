@@ -48,7 +48,8 @@ trait DietUp_Zibal_Trait {
             if (!in_array((int)($verified['result'] ?? 0), array(100, 201), true)) {
                 $wpdb->update($this->table, array('payment_status' => 'failed', 'updated_at' => current_time('mysql')), array('id' => $row->id, 'payment_status' => 'pending'));
                 $return_url = !empty($row->return_url) ? $row->return_url : home_url('/');
-                wp_safe_redirect(add_query_arg(array('dietup_status'=>'cancelled','dietup_payment'=>'cancelled','dietup_access'=>$access_token), $return_url));
+                $gateway_message = sanitize_text_field((string)($verified['message'] ?? ''));
+                wp_safe_redirect(add_query_arg(array('dietup_status'=>'cancelled','dietup_payment'=>'cancelled','dietup_access'=>$access_token,'dietup_reason'=>substr($gateway_message,0,240)), $return_url));
                 exit;
             }
             if ((int)($verified['amount'] ?? 0) !== ((int)$row->package_price * 10)) {
