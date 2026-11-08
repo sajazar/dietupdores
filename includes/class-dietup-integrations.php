@@ -47,7 +47,18 @@ final class DietUp_Integrations {
         return $json;
     }
 
+    /** Return true only when this exact package is explicitly enabled for SpotPlayer issuance. */
+    public static function spotplayer_package_enabled($package_key) {
+        $allowed = array('online', 'certificate', 'complete');
+        $s = get_option('dietup_integration_settings', array());
+        $selected = isset($s['spotplayer_issue_packages']) && is_array($s['spotplayer_issue_packages']) ? $s['spotplayer_issue_packages'] : array();
+        return in_array((string)$package_key, $allowed, true) && in_array((string)$package_key, $selected, true);
+    }
+
     public static function spotplayer_license($registration) {
+        if (!is_object($registration) || empty($registration->package_key) || !self::spotplayer_package_enabled($registration->package_key)) {
+            return new WP_Error('dietup_spot_package_disabled', 'صدور لایسنس SpotPlayer برای این پکیج فعال نیست.');
+        }
         $s = get_option('dietup_integration_settings', array());
         $api = isset($s['spotplayer_api_key']) ? trim($s['spotplayer_api_key']) : '';
         $course = isset($s['spotplayer_course_id']) ? trim($s['spotplayer_course_id']) : '';
