@@ -49,3 +49,11 @@
 @keyframes dietup-telegram-glow{0%,100%{box-shadow:0 8px 20px rgba(0,136,204,.18),0 0 0 0 rgba(0,136,204,.18)}50%{box-shadow:0 12px 28px rgba(0,136,204,.3),0 0 0 7px rgba(0,136,204,0)}}
 @media(prefers-reduced-motion:reduce){.dietup-package,.dietup-form button,.dietup-verification-account button,.dietup-telegram-button{animation:none!important;transition:none!important}.dietup-package:hover,.dietup-telegram-button:hover{transform:none}}
 @media(max-width:700px){.dietup-packages{grid-template-columns:1fr}.dietup-package{min-height:0}.dietup-account-registration{padding:18px!important}}
+
+
+/* Requested registration form refinements */
+.dietup-package{text-align:center;align-items:center;}
+.dietup-package-course-title{display:block;margin:0 0 8px;color:#63788a;font-size:12px;font-weight:500;line-height:1.8;}
+.dietup-package ul{display:inline-block;text-align:right;margin-left:auto;margin-right:auto;}
+.dietup-form>button[type=submit]{display:block;width:min(100%,420px);margin:18px auto 0;}
+.dietup-form .dietup-check{justify-content:flex-start;text-align:right;}
