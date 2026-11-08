@@ -221,7 +221,7 @@ final class DietUp_Plugin {
                 echo '<section class="dietup-payment-result"><h2>نتیجه ثبت‌نام و پرداخت</h2>';
                 echo '<p><strong>نام:</strong> '.esc_html($registration->full_name).'</p><p><strong>شماره ثبت‌نام:</strong> '.esc_html($registration->id).'</p>';
                 echo '<p><strong>پکیج:</strong> '.esc_html($package['title']).'</p>';
-                $base_price = isset($registration->base_package_price) ? (int)$registration->base_package_price : (int)$registration->package_price;
+                $base_price = !empty($registration->base_package_price) ? (int)$registration->base_package_price : (int)$registration->package_price;
                 if ((int)$registration->discount_amount > 0) { echo '<p><strong>قیمت پکیج:</strong> '.esc_html(number_format_i18n($base_price)).' تومان</p><p><strong>کد تخفیف:</strong> '.esc_html($registration->discount_code).' ('.esc_html((int)$registration->discount_percent).'% )</p><p><strong>مبلغ تخفیف:</strong> '.esc_html(number_format_i18n((int)$registration->discount_amount)).' تومان</p>'; }
                 echo '<p><strong>مبلغ نهایی ثبت‌شده:</strong> '.esc_html(number_format_i18n((int)$registration->package_price)).' تومان</p>';
                 echo '<p><strong>وضعیت پرداخت:</strong> '.esc_html($this->payment_label($registration->payment_status)).'</p>';
@@ -329,7 +329,7 @@ final class DietUp_Plugin {
         if ('' === $code) { return array('code' => '', 'percent' => 0, 'discount' => 0, 'final' => $base_price); }
         $settings = $this->get_settings();
         $configured = strtoupper(trim((string)$settings['coupon_code']));
-        $percent = min(100, max(0, (int)$settings['coupon_percent']));
+        $percent = min(99, max(0, (int)$settings['coupon_percent']));
         if ('' === $configured || 0 === $percent || !hash_equals($configured, $code)) { return new WP_Error('dietup_coupon_invalid', 'کد تخفیف واردشده معتبر یا فعال نیست.'); }
         // Integer Toman arithmetic; floor prevents discount from exceeding the configured percentage.
         $discount = (int) floor(($base_price * $percent) / 100);
@@ -542,7 +542,7 @@ final class DietUp_Plugin {
         }
         echo '</tbody></table><h2>کد تخفیف</h2><p>در هر زمان یک کد تخفیف فعال تعریف می‌شود. برای غیرفعال‌کردن آن، کد را خالی یا درصد را صفر کنید. تخفیف به‌صورت درصدی از قیمت پکیج انتخابی محاسبه می‌شود.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_coupon_code">کد تخفیف</label></th><td><input class="regular-text" id="dietup_coupon_code" name="coupon_code" value="'.esc_attr($s['coupon_code']).'" maxlength="80" autocomplete="off" placeholder="مثلاً DIETUP20"></td></tr>';
-        echo '<tr><th><label for="dietup_coupon_percent">درصد تخفیف</label></th><td><input type="number" id="dietup_coupon_percent" name="coupon_percent" min="0" max="100" step="1" value="'.esc_attr((int)$s['coupon_percent']).'"> درصد <p class="description">عدد صحیح بین ۱ تا ۱۰۰؛ درصد ۱۰۰ پرداخت را صفر می‌کند.</p></td></tr>';
+        echo '<tr><th><label for="dietup_coupon_percent">درصد تخفیف</label></th><td><input type="number" id="dietup_coupon_percent" name="coupon_percent" min="0" max="99" step="1" value="'.esc_attr((int)$s['coupon_percent']).'"> درصد <p class="description">عدد صحیح بین ۱ تا ۱۰۰؛ درصد ۱۰۰ پرداخت را صفر می‌کند.</p></td></tr>';
         echo '</tbody></table><h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
         echo '<tr><th>پرداخت آزمایشی</th><td><label><input type="checkbox" name="gateway_test_mode" value="1" '.checked(!empty($s['gateway_test_mode']), true, false).'> فعال‌سازی ثبت پرداخت موفق بدون اتصال به زیبال</label><p class="description"><strong>هشدار:</strong> در این حالت فقط مدیران سایت پرداخت شبیه‌سازی‌شده خواهند داشت؛ سایر کاربران همچنان به درگاه واقعی زیبال هدایت می‌شوند. بااین‌حال برای ثبت‌نام آزمایشی، درخواست صدور لایسنس واقعی به SpotPlayer ارسال می‌شود و ممکن است در حساب SpotPlayer شما لایسنس ثبت شود. پس از پایان تست، این گزینه را خاموش کنید.</p></td></tr>';
@@ -569,7 +569,7 @@ final class DietUp_Plugin {
         $new = $old;
         $new['coupon_code'] = isset($_POST['coupon_code']) ? strtoupper(trim(sanitize_text_field(wp_unslash($_POST['coupon_code'])))) : '';
         $new['coupon_code'] = preg_replace('/[^A-Z0-9_-]/', '', $new['coupon_code']);
-        $new['coupon_percent'] = isset($_POST['coupon_percent']) ? min(100, absint($_POST['coupon_percent'])) : 0;
+        $new['coupon_percent'] = isset($_POST['coupon_percent']) ? min(99, absint($_POST['coupon_percent'])) : 0;
         if ('' === $new['coupon_code'] || 0 === (int)$new['coupon_percent']) { $new['coupon_code'] = ''; $new['coupon_percent'] = 0; }
         foreach ($text_fields as $field) {
             $new[$field] = isset($_POST[$field]) ? sanitize_text_field(wp_unslash($_POST[$field])) : '';
