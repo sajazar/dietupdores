@@ -57,3 +57,10 @@
 .dietup-package ul{display:inline-block;text-align:right;margin-left:auto;margin-right:auto;}
 .dietup-form>button[type=submit]{display:block;width:min(100%,420px);margin:18px auto 0;}
 .dietup-form .dietup-check{justify-content:flex-start;text-align:right;}
+
+/* Successful payment result notices and account shortcut */
+.dietup-spotplayer-key-note{line-height:2;color:#25475e}
+.dietup-telegram-warning{margin:18px 0 8px;padding:14px 16px;border:1px solid #f0d28b;border-right:4px solid #d99a22;border-radius:12px;background:#fff9e9;color:#79551b;line-height:2;font-weight:600}
+.dietup-account-link-wrap{margin:22px 0 0!important}
+.dietup-payment-result .dietup-account-link{display:flex!important;width:100%;min-height:52px;box-sizing:border-box;align-items:center;justify-content:center;margin:0!important;padding:14px 18px!important;border:0!important;border-radius:13px!important;background:linear-gradient(110deg,#145b83,#168b91)!important;color:#fff!important;text-decoration:none!important;font-weight:800!important;text-align:center;box-shadow:0 8px 20px rgba(20,103,132,.18)}
+.dietup-payment-result .dietup-account-link:hover{filter:brightness(1.06);transform:translateY(-1px)}
