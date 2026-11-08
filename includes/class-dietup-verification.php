@@ -250,7 +250,14 @@ final class DietUp_Verification {
         $registrations = $wpdb->prefix . 'dietup_registrations';
         $docs = self::documents_table();
         $rows = $wpdb->get_results("SELECT * FROM {$registrations} ORDER BY id DESC LIMIT 200");
-        echo '<div class="wrap"><h1>مدارک تخصصی و گواهی کاربران</h1><p>حداکثر ۲۰۰ ثبت‌نام آخر نمایش داده می‌شود. فایل‌ها خصوصی هستند و فقط مدیر مجاز به مشاهده آن‌هاست.</p>';
+        echo '<div class="wrap dietup-verification-admin"><style>
+        .dietup-verification-admin .postbox{border:1px solid #dce7ef;border-radius:16px;box-shadow:0 8px 24px rgba(20,45,65,.06);padding:18px!important}
+        .dietup-verification-admin .postbox h2{color:#173e5a}
+        .dietup-verification-admin .postbox h3{color:#24617b}
+        .dietup-verification-admin input[type=file]{padding:10px;border:1px dashed #a9c4d1;border-radius:10px;background:#f8fbfd;max-width:100%}
+        .dietup-verification-admin .button-primary{background:linear-gradient(110deg,#145b83,#168b91);border:0;border-radius:9px;padding:5px 14px}
+        .dietup-verification-admin .dietup-certificate-delete-button{color:#a33b35;border-color:#edcfcd;background:#fff8f7}
+        </style><h1>مدارک تخصصی و گواهی کاربران</h1><p>حداکثر ۲۰۰ ثبت‌نام آخر نمایش داده می‌شود. فایل‌ها خصوصی هستند و فقط مدیر مجاز به مشاهده آن‌هاست.</p>';
         if (isset($_GET['specialties_saved'])) { echo '<div class="notice notice-success"><p>فهرست تخصص‌ها ذخیره شد.</p></div>'; }
         echo '<details class="postbox" style="padding:12px;margin:12px 0"><summary><strong>مدیریت فهرست تخصص‌های پزشکی</strong></summary><form method="post" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_save_specialties">';
         wp_nonce_field('dietup_save_specialties', 'dietup_specialties_nonce');
