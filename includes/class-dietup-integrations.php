@@ -56,8 +56,8 @@ final class DietUp_Integrations {
     }
 
     public static function spotplayer_license($registration) {
-        if (!is_object($registration) || empty($registration->package_key) || !self::spotplayer_package_enabled($registration->package_key)) {
-            return new WP_Error('dietup_spot_package_disabled', 'صدور لایسنس SpotPlayer برای این پکیج فعال نیست.');
+        if (!is_object($registration) || empty($registration->id) || empty($registration->package_key)) {
+            return new WP_Error('dietup_spot_registration', 'اطلاعات ثبت‌نام برای صدور لایسنس کامل نیست.');
         }
         $s = get_option('dietup_integration_settings', array());
         $api = isset($s['spotplayer_api_key']) ? trim($s['spotplayer_api_key']) : '';
