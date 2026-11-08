@@ -32,6 +32,7 @@ final class DietUp_Plugin {
         add_action('admin_post_dietup_export_csv', array($this, 'export_csv'));
         add_action('admin_post_dietup_export_xlsx', array($this, 'export_xlsx'));
         add_action('admin_post_dietup_retry_license', array($this, 'retry_license'));
+        add_action('admin_post_dietup_delete_registration', array($this, 'delete_registration'));
     }
 
     public static function activate() {
@@ -563,7 +564,18 @@ final class DietUp_Plugin {
         $sql = "SELECT * FROM {$this->table} WHERE " . implode(' AND ', $where) . ' ORDER BY id DESC LIMIT 500';
         $rows = $args ? $wpdb->get_results($wpdb->prepare($sql, $args)) : $wpdb->get_results($sql);
         $stats = $wpdb->get_row("SELECT COUNT(*) total, SUM(payment_status='paid' AND (payment_gateway IS NULL OR payment_gateway <> 'test')) paid_count, COALESCE(SUM(CASE WHEN payment_status='paid' AND (payment_gateway IS NULL OR payment_gateway <> 'test') THEN package_price ELSE 0 END),0) revenue FROM {$this->table}");
-        echo '<div class="wrap"><h1>مدیریت ثبت‌نام دوره دایت‌آپ</h1>';
+        echo '<div class="wrap dietup-admin-wrap"><style>
+        .dietup-admin-wrap .widefat{border:0;border-radius:12px;overflow:hidden;box-shadow:0 5px 22px rgba(20,35,55,.06)}
+        .dietup-admin-wrap .widefat thead th{background:#edf4fa;color:#173b59;padding:12px 9px}
+        .dietup-admin-wrap .widefat td{padding:12px 9px;vertical-align:middle}
+        .dietup-admin-wrap .widefat tbody tr:hover{background:#f4f9fd}
+        .dietup-admin-status{display:inline-block;padding:5px 9px;border-radius:20px;background:#edf4fa;color:#245477;font-size:12px;white-space:nowrap}
+        .dietup-admin-wrap .dietup-delete-registration{border-color:#e8b8b5;color:#a52f2a;background:#fff7f6}
+        .dietup-admin-wrap .dietup-delete-registration:hover{background:#a52f2a;color:#fff;border-color:#a52f2a}
+        .dietup-admin-wrap .notice-info{border:0;border-right:4px solid #2b7ba8;border-radius:10px;padding:12px 16px}
+        @media(max-width:782px){.dietup-admin-wrap .widefat{display:block;overflow-x:auto;white-space:nowrap}}
+        </style><h1>مدیریت ثبت‌نام دوره دایت‌آپ</h1>';
+        if (isset($_GET['deleted']) && '1' === (string)$_GET['deleted']) { echo '<div class="notice notice-success is-dismissible"><p>اطلاعات ثبت‌نام و فایل‌های خصوصی مرتبط از دایت‌آپ حذف شدند.</p></div>'; }
         echo '<div class="notice notice-info"><p>ثبت‌نام‌ها: <strong>'.esc_html(number_format_i18n((int)$stats->total)).'</strong> | پرداخت موفق: <strong>'.esc_html(number_format_i18n((int)$stats->paid_count)).'</strong> | فروش تأییدشده: <strong>'.esc_html(number_format_i18n((int)$stats->revenue)).' تومان</strong></p></div>';
         echo '<form method="get" style="display:flex;gap:8px;align-items:center;margin:14px 0"><input type="hidden" name="page" value="dietup"><input type="search" name="s" value="'.esc_attr($search).'" placeholder="نام، موبایل یا ایمیل">';
         echo '<select name="payment_status"><option value="">همه وضعیت‌های پرداخت</option>';
@@ -579,19 +591,39 @@ final class DietUp_Plugin {
         wp_nonce_field('dietup_export_xlsx', 'dietup_xlsx_nonce');
         echo '<input type="hidden" name="payment_status" value="' . esc_attr($status) . '"><input type="hidden" name="package_key" value="' . esc_attr($package) . '"><input type="hidden" name="s" value="' . esc_attr($search) . '">';
         echo '<button class="button">دریافت فایل Excel (XLSX)</button></form><p>برای جلوگیری از کندی، حداکثر ۵۰۰ رکورد در این فهرست نمایش داده می‌شود.</p>';
-        echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>تخصص / رشته</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th></tr></thead><tbody>';
+        echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>تخصص / رشته</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th><th>عملیات</th></tr></thead><tbody>';
         if ($rows) { foreach ($rows as $r) {
-            echo '<tr><td>'.esc_html($r->id).'</td><td>'.esc_html($r->full_name).'</td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->specialty).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).'</td><td>'.esc_html(('test' === $r->payment_gateway && 'paid' === $r->payment_status) ? 'موفق (آزمایشی)' : $this->payment_label($r->payment_status)).'</td><td>'.esc_html($this->license_label($r->license_status));
+            echo '<tr><td>'.esc_html($r->id).'</td><td><strong>'.esc_html($r->full_name).'</strong></td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->specialty).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.esc_html(number_format_i18n($r->package_price)).'</td><td><span class="dietup-admin-status">'.esc_html(('test' === $r->payment_gateway && 'paid' === $r->payment_status) ? 'موفق (آزمایشی)' : $this->payment_label($r->payment_status)).'</span></td><td><span class="dietup-admin-status">'.esc_html($this->license_label($r->license_status)).'</span>';
             if ('failed' === $r->license_status && 'paid' === $r->payment_status) {
                 echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="dietup_retry_license"><input type="hidden" name="registration_id" value="' . esc_attr($r->id) . '">';
                 wp_nonce_field('dietup_retry_license_' . $r->id, 'dietup_retry_nonce');
                 echo '<button class="button button-small">تلاش مجدد صدور لایسنس</button></form>';
             }
-            echo '</td><td>'.esc_html($r->created_at).'</td></tr>';
-        }} else { echo '<tr><td colspan="12">رکوردی مطابق فیلترها پیدا نشد.</td></tr>'; }
+            echo '</td><td>'.esc_html($r->created_at).'</td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'" onsubmit="return confirm(\'هشدار: تمام اطلاعات ثبت‌نام، مدارک، گواهی و سوابق این فرد از دایت‌آپ برای همیشه حذف می‌شود. این کار قابل بازگشت نیست. ادامه می‌دهید؟\')"><input type="hidden" name="action" value="dietup_delete_registration"><input type="hidden" name="registration_id" value="'.esc_attr($r->id).'">';
+            wp_nonce_field('dietup_delete_registration_'.$r->id, 'dietup_delete_registration_nonce');
+            echo '<button type="submit" class="button button-small dietup-delete-registration">حذف کامل</button></form></td></tr>';
+        }} else { echo '<tr><td colspan="13">رکوردی مطابق فیلترها پیدا نشد.</td></tr>'; }
         echo '</tbody></table></div>';
     }
 
+
+    public function delete_registration() {
+        if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
+        $id = isset($_POST['registration_id']) ? absint($_POST['registration_id']) : 0;
+        if (!$id || !isset($_POST['dietup_delete_registration_nonce']) ||
+            !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_delete_registration_nonce'])), 'dietup_delete_registration_' . $id)) {
+            wp_die('درخواست حذف نامعتبر است.');
+        }
+        global $wpdb;
+        $row = $wpdb->get_row($wpdb->prepare("SELECT id FROM {$this->table} WHERE id = %d", $id));
+        if (!$row) { wp_die('ثبت‌نام موردنظر پیدا نشد یا قبلاً حذف شده است.'); }
+        // Remove private qualification/certificate files and review history before deleting the registration.
+        DietUp_Verification::delete_registration_data($id);
+        $deleted = $wpdb->delete($this->table, array('id' => $id), array('%d'));
+        if (false === $deleted) { wp_die('حذف اطلاعات ثبت‌نام از پایگاه داده ناموفق بود.'); }
+        wp_safe_redirect(add_query_arg(array('page' => 'dietup', 'deleted' => '1'), admin_url('admin.php')));
+        exit;
+    }
 
     public function retry_license() {
         if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
