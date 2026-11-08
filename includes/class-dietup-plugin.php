@@ -217,11 +217,13 @@ final class DietUp_Plugin {
                     echo '<h3>مشخصات دوره</h3><ul>';
                     foreach ((array)($package['features'] ?? array()) as $feature) { echo '<li>'.esc_html($feature).'</li>'; }
                     echo '</ul>';
-                    if (DietUp_Integrations::spotplayer_package_enabled($registration->package_key)) { echo '<p><strong>وضعیت لایسنس SpotPlayer:</strong> '.esc_html($this->license_label($registration->license_status)).'</p>'; }
-                    if ('issued' === $registration->license_status && $registration->license_key && DietUp_Integrations::spotplayer_package_enabled($registration->package_key)) { echo '<p>کلید SpotPlayer:</p><textarea readonly style="width:100%;min-height:90px;direction:ltr">'.esc_textarea($registration->license_key).'</textarea>'; }
-                    elseif ('failed' === $registration->license_status) { echo '<p>صدور لایسنس ناموفق بود. تنظیمات API و شناسه دوره SpotPlayer را بررسی کنید؛ سپس از پنل مدیریت تلاش مجدد را بزنید.</p>'; }
-                    elseif ('unknown' === $registration->license_status) { echo '<p>نتیجه درخواست صدور قطعی نیست؛ برای جلوگیری از صدور تکراری، ابتدا پنل SpotPlayer را بررسی کنید.</p>'; }
-                    elseif ('pending' === $registration->license_status || 'issuing' === $registration->license_status) { echo '<p>صدور دسترسی در حال تکمیل است.</p>'; }
+                    if (DietUp_Integrations::spotplayer_package_enabled($registration->package_key)) {
+                        echo '<p><strong>وضعیت لایسنس SpotPlayer:</strong> '.esc_html($this->license_label($registration->license_status)).'</p>';
+                        if ('issued' === $registration->license_status && $registration->license_key) { echo '<p>کلید SpotPlayer:</p><textarea readonly style="width:100%;min-height:90px;direction:ltr">'.esc_textarea($registration->license_key).'</textarea>'; }
+                        elseif ('failed' === $registration->license_status) { echo '<p>صدور لایسنس ناموفق بود. تنظیمات API و شناسه دوره SpotPlayer را بررسی کنید؛ سپس از پنل مدیریت تلاش مجدد را بزنید.</p>'; }
+                        elseif ('unknown' === $registration->license_status) { echo '<p>نتیجه درخواست صدور قطعی نیست؛ برای جلوگیری از صدور تکراری، ابتدا پنل SpotPlayer را بررسی کنید.</p>'; }
+                        elseif ('pending' === $registration->license_status || 'issuing' === $registration->license_status) { echo '<p>صدور دسترسی در حال تکمیل است.</p>'; }
+                    }
                     if ('complete' === $registration->package_key) {
                         $resources = DietUp_Private_Files::resources();
                         foreach (array('video'=>'دریافت ویدئوی آفلاین دوره','booklet'=>'دانلود جزوه دوره') as $type=>$label) {
@@ -294,7 +296,7 @@ final class DietUp_Plugin {
             </label>
             </fieldset>
             <fieldset><legend>تأیید نهایی</legend>
-                <label class="dietup-check"><input type="checkbox" name="accept_terms" value="1" required> تأیید قوانین دوره: اطلاعات واردشده را صحیح و حرفه‌ای می‌دانم و با شرایط ثبت‌نام، نحوه دسترسی به محتوای دوره و قوانین استفاده از فایل‌های آموزشی موافقم.</label>
+                <label class="dietup-check"><input type="checkbox" name="accept_terms" value="1" required> تأیید قوانین دوره: تأیید می‌کنم اطلاعات واردشده حرفه‌ای صحیح است و با شرایط ثبت‌نام، نحوه دسترسی به محتوای دوره و قوانین استفاده از فایل‌های آموزشی موافقم.</label>
             </fieldset>
             <button type="submit">پرداخت و دریافت اطلاعات دوره</button>
             <p class="dietup-small">پس از ثبت اطلاعات، وضعیت پرداخت و صدور دسترسی فقط پس از تأیید سرور درگاه اعلام می‌شود.</p>
