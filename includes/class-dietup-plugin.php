@@ -184,7 +184,7 @@ final class DietUp_Plugin {
             $account_url = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : wp_login_url(get_permalink());
             $return_url = get_permalink();
             if ($account_url && $return_url) { $account_url = add_query_arg('redirect_to', rawurlencode($return_url), $account_url); }
-            return '<div class="dietup-wrap" dir="rtl"><div class="dietup-notice">برای ثبت‌نام و مشاهده دوره در پنل شخصی، ابتدا وارد حساب کاربری خود شوید. <a href="' . esc_url($account_url) . '">ورود / عضویت</a></div></div>';
+            return '<div class="dietup-wrap" dir="rtl"><div class="dietup-login-card"><div class="dietup-login-card-icon" aria-hidden="true">↗</div><h3>برای ثبت‌نام در دوره ابتدا وارد حساب کاربری شوید</h3><p class="dietup-login-card-text">برای ثبت‌نام و مشاهده دوره در پنل شخصی، ابتدا وارد حساب کاربری خود شوید.</p><a class="dietup-login-button" href="' . esc_url($account_url) . '">ورود / ثبت‌نام</a><p class="dietup-login-card-hint">پس از ورود یا ایجاد حساب کاربری، دوباره به صفحه ثبت‌نام دوره برگردید و فرم ثبت‌نام را ارسال کنید.</p></div></div>';
         }
         $status = isset($_GET['dietup_status']) ? sanitize_key(wp_unslash($_GET['dietup_status'])) : '';
         ob_start();
