@@ -12,7 +12,18 @@ trait DietUp_Zibal_Trait {
             $this->redirect_status('error');
         }
         $wpdb->update($this->table, array('payment_gateway' => 'zibal', 'payment_authority' => $payment['track_id'], 'updated_at' => current_time('mysql')), array('id' => $registration_id));
-        wp_safe_redirect($payment['url']);
+        // Zibal is an external, trusted payment host; wp_safe_redirect() rejects
+        // external hosts unless explicitly allow-listed and can fall back to wp-admin.
+        $payment_url = isset($payment['url']) ? esc_url_raw($payment['url']) : '';
+        $payment_parts = wp_parse_url($payment_url);
+        if (!$payment_parts || 'https' !== ($payment_parts['scheme'] ?? '') ||
+            'gateway.zibal.ir' !== strtolower($payment_parts['host'] ?? '') ||
+            !preg_match('#^/start/[0-9]+$#', $payment_parts['path'] ?? '') ||
+            isset($payment_parts['user']) || isset($payment_parts['pass']) || isset($payment_parts['port'])) {
+            $wpdb->update($this->table, array('payment_status' => 'failed', 'updated_at' => current_time('mysql')), array('id' => $registration_id));
+            $this->redirect_status('error');
+        }
+        wp_redirect($payment_url, 303);
         exit;
     }
 
