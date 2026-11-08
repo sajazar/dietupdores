@@ -183,6 +183,9 @@ final class DietUp_Plugin {
             echo '<div class="dietup-notice error">ثبت اطلاعات یا اتصال به درگاه با مشکل روبه‌رو شد. لطفاً اطلاعات را بررسی و دوباره تلاش کنید.</div>';
         } elseif ('cancelled' === $status || (isset($_GET['dietup_payment']) && 'cancelled' === sanitize_key(wp_unslash($_GET['dietup_payment'])))) {
             echo '<div class="dietup-notice error">پرداخت لغو شد یا توسط درگاه تأیید نشد. پرداخت موفقی برای این ثبت‌نام ثبت نشده است. می‌توانید دوباره اقدام کنید.</div>';
+            if (isset($_GET['dietup_reason']) && '' !== sanitize_text_field(wp_unslash($_GET['dietup_reason']))) {
+                echo '<p>توضیح درگاه: '.esc_html(sanitize_text_field(wp_unslash($_GET['dietup_reason']))).'</p>';
+            }
         } elseif (isset($_GET['dietup_payment']) && 'success' === sanitize_key(wp_unslash($_GET['dietup_payment']))) {
             echo '<div class="dietup-notice success">پرداخت شما با موفقیت تأیید شد. مشخصات ثبت‌نام و دسترسی دوره در همین صفحه نمایش داده شده است.</div>';
         }
