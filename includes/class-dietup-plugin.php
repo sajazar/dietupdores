@@ -219,7 +219,7 @@ final class DietUp_Plugin {
                     echo '</ul>';
                     if (DietUp_Integrations::spotplayer_package_enabled($registration->package_key)) {
                         echo '<p><strong>وضعیت لایسنس SpotPlayer:</strong> '.esc_html($this->license_label($registration->license_status)).'</p>';
-                        if ('issued' === $registration->license_status && $registration->license_key) { echo '<p>کلید SpotPlayer:</p><textarea readonly style="width:100%;min-height:90px;direction:ltr">'.esc_textarea($registration->license_key).'</textarea>'; }
+                        if ('issued' === $registration->license_status && $registration->license_key) { echo '<p class="dietup-spotplayer-key-note"><strong>کلید SpotPlayer:</strong> این کلید برای مشاهده دوره آفلاین در اسپات پلیر است. این کلید در پنل کاربری شما ذخیره شده است.</p><textarea readonly style="width:100%;min-height:90px;direction:ltr">'.esc_textarea($registration->license_key).'</textarea>'; }
                         elseif ('failed' === $registration->license_status) { echo '<p>صدور لایسنس ناموفق بود. تنظیمات API و شناسه دوره SpotPlayer را بررسی کنید؛ سپس از پنل مدیریت تلاش مجدد را بزنید.</p>'; }
                         elseif ('unknown' === $registration->license_status) { echo '<p>نتیجه درخواست صدور قطعی نیست؛ برای جلوگیری از صدور تکراری، ابتدا پنل SpotPlayer را بررسی کنید.</p>'; }
                         elseif ('pending' === $registration->license_status || 'issuing' === $registration->license_status) { echo '<p>صدور دسترسی در حال تکمیل است.</p>'; }
@@ -232,7 +232,8 @@ final class DietUp_Plugin {
                         }
                     }
                     $settings = $this->get_settings();
-                    if (!empty($settings['telegram_url'])) { echo '<p><a href="'.esc_url($settings['telegram_url']).'" target="_blank" rel="noopener noreferrer" class="dietup-telegram-button">عضویت در کانال تلگرام دوره</a></p>'; }
+                    if (!empty($settings['telegram_url'])) { echo '<div class="dietup-telegram-warning"><strong>توجه!</strong> لطفاً حتماً از طریق لینک زیر عضو کانال تلگرام شوید؛ زیرا تمامی اطلاع‌رسانی‌های دوره از طریق این کانال انجام می‌شود.</div><p><a href="'.esc_url($settings['telegram_url']).'" target="_blank" rel="noopener noreferrer" class="dietup-telegram-button">عضویت در کانال تلگرام دوره</a></p>'; }
+                    echo '<p class="dietup-account-link-wrap"><a class="dietup-account-link" href="https://www.dietupschool.ir/my-account/dietup-courses/">مشخصات سفارش در پنل کاربری شما</a></p>';
                 }
                 echo '</section>';
             }
