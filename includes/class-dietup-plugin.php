@@ -23,6 +23,7 @@ final class DietUp_Plugin {
         add_filter('woocommerce_account_menu_items', array($this, 'account_menu_items'));
         add_action('woocommerce_account_dietup-courses_endpoint', array($this, 'render_account_courses'));
         add_action('admin_menu', array($this, 'admin_menu'));
+        add_action('admin_menu', array($this, 'rename_admin_menu_label'), 999);
         add_action('admin_post_dietup_save_settings', array($this, 'save_settings'));
         add_action('admin_post_nopriv_dietup_zibal_callback', array($this, 'zibal_callback'));
         add_action('admin_post_dietup_zibal_callback', array($this, 'zibal_callback'));
@@ -123,7 +124,7 @@ final class DietUp_Plugin {
         foreach ($rows as $row) {
             $package = $this->packages()[$row->package_key]['title'] ?? $row->package_key;
             echo '<section class="dietup-account-registration" style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:0 0 16px">';
-            echo '<h3>' . esc_html($package) . '</h3><p>نام ثبت‌نام: ' . esc_html($row->full_name) . '</p>';
+            echo '<h3>' . esc_html($package) . '</h3><p class="dietup-account-course-name"><strong>این پکیج مربوط به دوره:</strong> ' . esc_html('دوره جامع آمپول های لاغری ( دایت آپ )') . '</p><p>نام ثبت‌نام: ' . esc_html($row->full_name) . '</p>';
             echo '<p>شماره ثبت‌نام: ' . esc_html($row->id) . ' | تاریخ: ' . esc_html($row->created_at) . '</p>';
             echo '<p>وضعیت پرداخت: <strong>' . esc_html($this->payment_label($row->payment_status)) . '</strong></p>';
             if ('paid' === $row->payment_status) {
@@ -432,6 +433,19 @@ final class DietUp_Plugin {
         }
 
         $this->start_zibal_payment($registration_id, $access_token);
+    }
+
+    public function rename_admin_menu_label() {
+        global $menu, $submenu;
+        foreach ((array) $menu as $index => $item) {
+            if (isset($item[2]) && 'dietup' === $item[2]) {
+                $menu[$index][0] = 'دوره‌های جامع';
+                break;
+            }
+        }
+        if (isset($submenu['dietup'][0][0])) {
+            $submenu['dietup'][0][0] = 'دوره‌های جامع';
+        }
     }
 
     public function admin_menu() {
