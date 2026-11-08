@@ -137,7 +137,7 @@ final class DietUp_Plugin {
                     else { echo '<p>جزوه دوره هنوز بارگذاری نشده است.</p>'; }
                     if (!empty($resources['video']['path']) && is_file($resources['video']['path'])) { echo '<p><a href="' . esc_url(DietUp_Private_Files::account_download_url((int)$row->id, 'video')) . '">دانلود ویدئوی آفلاین دوره</a></p>'; }
                 }
-                if ($telegram) { echo '<p><a href="' . esc_url($telegram) . '" target="_blank" rel="noopener noreferrer">ورود به کانال / گروه تلگرام دوره</a></p>'; }
+                if ($telegram) { echo '<p><a href="' . esc_url($telegram) . '" target="_blank" rel="noopener noreferrer" class="dietup-telegram-button">عضویت در کانال تلگرام دوره</a></p>'; }
             }
             DietUp_Verification::render_account_section($row);
             echo '</section>';
@@ -230,7 +230,7 @@ final class DietUp_Plugin {
                         }
                     }
                     $settings = $this->get_settings();
-                    if (!empty($settings['telegram_url'])) { echo '<p><a href="'.esc_url($settings['telegram_url']).'" target="_blank" rel="noopener noreferrer">ورود به کانال / گروه تلگرام دوره</a></p>'; }
+                    if (!empty($settings['telegram_url'])) { echo '<p><a href="'.esc_url($settings['telegram_url']).'" target="_blank" rel="noopener noreferrer" class="dietup-telegram-button">عضویت در کانال تلگرام دوره</a></p>'; }
                 }
                 echo '</section>';
             }
@@ -576,6 +576,7 @@ final class DietUp_Plugin {
         @media(max-width:782px){.dietup-admin-wrap .widefat{display:block;overflow-x:auto;white-space:nowrap}}
         </style><h1>مدیریت ثبت‌نام دوره دایت‌آپ</h1>';
         if (isset($_GET['deleted']) && '1' === (string)$_GET['deleted']) { echo '<div class="notice notice-success is-dismissible"><p>اطلاعات ثبت‌نام و فایل‌های خصوصی مرتبط از دایت‌آپ حذف شدند.</p></div>'; }
+        echo '<div class="notice notice-warning"><p>حذف کامل، اطلاعات ثبت‌نام دایت‌آپ، مدارک بارگذاری‌شده، گواهی و تاریخچه بررسی را پاک می‌کند؛ حساب کاربری وردپرس و لایسنس ثبت‌شده در پنل SpotPlayer به‌صورت خودکار حذف یا باطل نمی‌شوند.</p></div>';
         echo '<div class="notice notice-info"><p>ثبت‌نام‌ها: <strong>'.esc_html(number_format_i18n((int)$stats->total)).'</strong> | پرداخت موفق: <strong>'.esc_html(number_format_i18n((int)$stats->paid_count)).'</strong> | فروش تأییدشده: <strong>'.esc_html(number_format_i18n((int)$stats->revenue)).' تومان</strong></p></div>';
         echo '<form method="get" style="display:flex;gap:8px;align-items:center;margin:14px 0"><input type="hidden" name="page" value="dietup"><input type="search" name="s" value="'.esc_attr($search).'" placeholder="نام، موبایل یا ایمیل">';
         echo '<select name="payment_status"><option value="">همه وضعیت‌های پرداخت</option>';
