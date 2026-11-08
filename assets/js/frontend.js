@@ -9,8 +9,6 @@
         var profession = form.querySelector('select[name="profession"]');
         var specialist = form.querySelector('[data-dietup-specialist]');
         var specialistSelect = specialist ? specialist.querySelector('select') : null;
-        var generalSpecialty = form.querySelector('[data-dietup-specialty-text]');
-        var generalSpecialtyInput = generalSpecialty ? generalSpecialty.querySelector('input') : null;
         var specialistOther = form.querySelector('[data-dietup-specialty-other]');
         var specialistOtherInput = specialistOther ? specialistOther.querySelector('input') : null;
 
@@ -27,8 +25,6 @@
             var isSpecialist = profession && profession.value === 'پزشک متخصص';
             if (specialist) specialist.hidden = !isSpecialist;
             if (specialistSelect) specialistSelect.required = !!isSpecialist;
-            if (generalSpecialty) generalSpecialty.hidden = !profession || !profession.value || isSpecialist;
-            if (generalSpecialtyInput) generalSpecialtyInput.required = !!profession && !isSpecialist && profession.value !== '';
             var needsOtherSpecialty = isSpecialist && specialistSelect && specialistSelect.value === 'سایر تخصص‌ها';
             if (specialistOther) specialistOther.hidden = !needsOtherSpecialty;
             if (specialistOtherInput) specialistOtherInput.required = !!needsOtherSpecialty;
