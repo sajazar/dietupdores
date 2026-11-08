@@ -127,7 +127,7 @@ final class DietUp_Plugin {
             echo '<p>شماره ثبت‌نام: ' . esc_html($row->id) . ' | تاریخ: ' . esc_html($row->created_at) . '</p>';
             echo '<p>وضعیت پرداخت: <strong>' . esc_html($this->payment_label($row->payment_status)) . '</strong></p>';
             if ('paid' === $row->payment_status) {
-                echo '<p>وضعیت لایسنس: ' . esc_html($this->license_label($row->license_status)) . '</p>';
+                if (DietUp_Integrations::spotplayer_package_enabled($row->package_key)) { echo '<p>وضعیت لایسنس: ' . esc_html($this->license_label($row->license_status)) . '</p>'; }
                 if ('issued' === $row->license_status && $row->license_key && DietUp_Integrations::spotplayer_package_enabled($row->package_key)) { echo '<label>کلید لایسنس SpotPlayer</label><textarea readonly style="width:100%;min-height:90px;direction:ltr">' . esc_textarea($row->license_key) . '</textarea>'; }
                 elseif ('failed' === $row->license_status) { echo '<p>صدور لایسنس ناموفق بود؛ لطفاً با پشتیبانی تماس بگیرید.</p>'; }
                 elseif ('unknown' === $row->license_status) { echo '<p>نتیجه صدور لایسنس نیازمند بررسی دستی در پنل SpotPlayer است.</p>'; }
@@ -217,7 +217,7 @@ final class DietUp_Plugin {
                     echo '<h3>مشخصات دوره</h3><ul>';
                     foreach ((array)($package['features'] ?? array()) as $feature) { echo '<li>'.esc_html($feature).'</li>'; }
                     echo '</ul>';
-                    echo '<p><strong>وضعیت لایسنس SpotPlayer:</strong> '.esc_html($this->license_label($registration->license_status)).'</p>';
+                    if (DietUp_Integrations::spotplayer_package_enabled($registration->package_key)) { echo '<p><strong>وضعیت لایسنس SpotPlayer:</strong> '.esc_html($this->license_label($registration->license_status)).'</p>'; }
                     if ('issued' === $registration->license_status && $registration->license_key && DietUp_Integrations::spotplayer_package_enabled($registration->package_key)) { echo '<p>کلید SpotPlayer:</p><textarea readonly style="width:100%;min-height:90px;direction:ltr">'.esc_textarea($registration->license_key).'</textarea>'; }
                     elseif ('failed' === $registration->license_status) { echo '<p>صدور لایسنس ناموفق بود. تنظیمات API و شناسه دوره SpotPlayer را بررسی کنید؛ سپس از پنل مدیریت تلاش مجدد را بزنید.</p>'; }
                     elseif ('unknown' === $registration->license_status) { echo '<p>نتیجه درخواست صدور قطعی نیست؛ برای جلوگیری از صدور تکراری، ابتدا پنل SpotPlayer را بررسی کنید.</p>'; }
@@ -264,7 +264,7 @@ final class DietUp_Plugin {
                 </label>
                 <label class="dietup-document-upload">بارگذاری مدرک تحصیلی یا تخصصی *
                     <input type="file" name="dietup_documents[]" accept=".pdf,.jpg,.jpeg,.png" multiple required>
-                    <small>حداکثر ۵ فایل PDF یا تصویر JPG/PNG؛ حداکثر ۵ مگابایت برای هر فایل.</small>
+                    <small>( عکس کارت نظام پزشکی یا پروانه مطب، یا کارت دانشجویی یا هر مدرکی که تخصص مربوطه را تأیید کند) حداکثر ۵ فایل PDF یا تصویر JPG/PNG؛ حداکثر ۵ مگابایت برای هر فایل.</small>
                 </label>
                 <label data-dietup-specialty-other hidden>عنوان تخصص (سایر) *
                     <input name="specialty_custom" type="text" maxlength="190">
@@ -282,6 +282,7 @@ final class DietUp_Plugin {
                 <label class="dietup-package">
                     <input type="radio" name="package_key" value="<?php echo esc_attr($key); ?>" data-certificate="<?php echo in_array($key, array('certificate','complete'), true) ? '1' : '0'; ?>" required>
                     <strong><?php echo esc_html($package['title']); ?></strong>
+                    <small class="dietup-package-course-title">دوره جامع آمپول های لاغری ( دایت آپ )</small>
                     <?php if (!empty($package['old'])) : ?><del><?php echo esc_html(number_format_i18n($package['old'])); ?> تومان</del><?php endif; ?>
                     <b><?php echo esc_html(number_format_i18n($package['price'])); ?> تومان</b>
                     <ul><?php foreach ($package['features'] as $feature) : ?><li><?php echo esc_html($feature); ?></li><?php endforeach; ?></ul>
@@ -293,10 +294,9 @@ final class DietUp_Plugin {
             </label>
             </fieldset>
             <fieldset><legend>تأیید نهایی</legend>
-                <label class="dietup-check"><input type="checkbox" name="confirm_info" value="1" required> صحت اطلاعات واردشده را تأیید می‌کنم.</label>
-                <label class="dietup-check"><input type="checkbox" name="accept_terms" value="1" required> با شرایط ثبت‌نام و قوانین استفاده از محتوای آموزشی موافقم.</label>
+                <label class="dietup-check"><input type="checkbox" name="accept_terms" value="1" required> تأیید قوانین دوره: اطلاعات واردشده را صحیح و حرفه‌ای می‌دانم و با شرایط ثبت‌نام، نحوه دسترسی به محتوای دوره و قوانین استفاده از فایل‌های آموزشی موافقم.</label>
             </fieldset>
-            <button type="submit">ثبت اطلاعات و ادامه</button>
+            <button type="submit">پرداخت و دریافت اطلاعات دوره</button>
             <p class="dietup-small">پس از ثبت اطلاعات، وضعیت پرداخت و صدور دسترسی فقط پس از تأیید سرور درگاه اعلام می‌شود.</p>
         </form>
         <?php endif; ?>
@@ -358,7 +358,7 @@ final class DietUp_Plugin {
             ('پزشک متخصص' === $profession && !in_array($specialty, DietUp_Verification::specialties(), true)) ||
             ('پزشک متخصص' === $profession && 'سایر تخصص‌ها' === $specialty && !$specialty_custom) ||
             !in_array($workplace, $valid_workplaces, true) ||
-            !isset($packages[$package_key]) || empty($_POST['confirm_info']) || empty($_POST['accept_terms']) ||
+            !isset($packages[$package_key]) || empty($_POST['accept_terms']) ||
             ('سایر' === $workplace && !$other) || ($needs_certificate && (!preg_match('/^[A-Za-z .\'-]{2,190}$/', $certificate_name))) ||
             (null !== $age && ($age < 1 || $age > 120))) {
             $this->redirect_status('error');
