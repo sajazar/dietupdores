@@ -313,8 +313,6 @@ final class DietUp_Plugin {
                 </label>
             <?php endforeach; ?>
             </div>
-            <div class="dietup-price-summary" aria-live="polite"><div><span>قیمت پکیج انتخابی</span><strong data-dietup-base-price>—</strong></div><div class="dietup-discount-row"><span>میزان تخفیف</span><strong data-dietup-discount>۰ تومان</strong></div><div class="dietup-final-price"><span>قیمت نهایی قابل پرداخت</span><strong data-dietup-final-price>ابتدا پکیج را انتخاب کنید</strong></div></div>
-            <div class="dietup-coupon-box"><label for="dietup_coupon_input">کد تخفیف (اختیاری)</label><div class="dietup-coupon-controls"><input type="text" id="dietup_coupon_input" name="coupon_code" maxlength="80" autocomplete="off" placeholder="کد تخفیف را وارد کنید"><button type="button" data-dietup-apply-coupon>اعمال کد تخفیف</button></div><p class="dietup-coupon-message" data-dietup-coupon-message aria-live="polite">در صورت داشتن کد تخفیف، آن را وارد و اعمال کنید.</p></div>
             <label data-dietup-certificate hidden>نام و نام خانوادگی انگلیسی برای صدور گواهی *
                 <input name="certificate_name" type="text" maxlength="190" autocomplete="name" pattern="[A-Za-z .'-]+" title="لطفاً نام را با حروف انگلیسی وارد کنید">
             </label>
@@ -322,6 +320,8 @@ final class DietUp_Plugin {
             <fieldset><legend>تأیید نهایی</legend>
                 <label class="dietup-check"><input type="checkbox" name="accept_terms" value="1" required> تأیید قوانین دوره: تأیید می‌کنم اطلاعات واردشده حرفه‌ای صحیح است و با شرایط ثبت‌نام، نحوه دسترسی به محتوای دوره و قوانین استفاده از فایل‌های آموزشی موافقم.</label>
             </fieldset>
+            <div class="dietup-price-summary" aria-live="polite"><div><span>قیمت پکیج انتخابی</span><strong data-dietup-base-price>—</strong></div><div class="dietup-discount-row"><span>میزان تخفیف</span><strong data-dietup-discount>۰ تومان</strong></div><div class="dietup-final-price"><span>قیمت نهایی قابل پرداخت</span><strong data-dietup-final-price>ابتدا پکیج را انتخاب کنید</strong></div></div>
+            <div class="dietup-coupon-box"><label for="dietup_coupon_input">کد تخفیف (اختیاری)</label><div class="dietup-coupon-controls"><input type="text" id="dietup_coupon_input" name="coupon_code" maxlength="80" autocomplete="off" placeholder="کد تخفیف را وارد کنید"><button type="button" data-dietup-apply-coupon>اعمال کد تخفیف</button></div><p class="dietup-coupon-message" data-dietup-coupon-message aria-live="polite">در صورت داشتن کد تخفیف، آن را وارد و اعمال کنید.</p></div>
             <button type="submit">پرداخت و دریافت اطلاعات دوره</button>
             <p class="dietup-small">پس از ثبت اطلاعات، وضعیت پرداخت و صدور دسترسی فقط پس از تأیید سرور درگاه اعلام می‌شود.</p>
         </form>
