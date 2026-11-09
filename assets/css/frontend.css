@@ -98,3 +98,42 @@
 .dietup-coupon-message.is-success{color:#16836e}
 .dietup-coupon-message.is-error{color:#b33b36}
 @media(max-width:520px){.dietup-price-summary{padding:14px}.dietup-coupon-controls{flex-direction:column}.dietup-coupon-controls button{width:100%;min-height:44px}}
+
+
+/* Coupon row sizing fix (0.8.1): keep input and action button balanced. */
+.dietup-form .dietup-coupon-box .dietup-coupon-controls{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:stretch;
+    gap:10px;
+    width:100%;
+}
+.dietup-form .dietup-coupon-box .dietup-coupon-controls input{
+    display:block;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    box-sizing:border-box;
+}
+.dietup-form .dietup-coupon-box .dietup-coupon-controls button{
+    display:inline-flex;
+    width:auto!important;
+    min-width:145px;
+    max-width:210px;
+    flex:0 0 auto;
+    align-items:center;
+    justify-content:center;
+    white-space:nowrap;
+    box-sizing:border-box;
+    padding:10px 16px;
+}
+@media(max-width:520px){
+    .dietup-form .dietup-coupon-box .dietup-coupon-controls{
+        grid-template-columns:minmax(0,1fr);
+    }
+    .dietup-form .dietup-coupon-box .dietup-coupon-controls button{
+        width:100%!important;
+        max-width:none;
+        min-width:0;
+    }
+}
