@@ -176,7 +176,16 @@ final class DietUp_Plugin {
     public function assets() {
         if (!is_singular()) { return; }
         global $post;
-        $has_form = $post && has_shortcode($post->post_content, 'dietup_registration');
+        $has_form = false;
+        if ($post) {
+            $has_form = has_shortcode($post->post_content, 'dietup_registration');
+            // Elementor stores shortcode widget content in post meta, not post_content.
+            // Detect it there as well so the pricing/coupon JavaScript is always enqueued.
+            if (!$has_form && isset($post->ID)) {
+                $elementor_data = get_post_meta($post->ID, '_elementor_data', true);
+                $has_form = is_string($elementor_data) && false !== strpos($elementor_data, 'dietup_registration');
+            }
+        }
         $is_account = function_exists('is_account_page') && is_account_page();
         if (!$has_form && !$is_account) { return; }
         wp_enqueue_style('dietup-form', DIETUP_URL . 'assets/css/frontend.css', array(), DIETUP_VERSION);
