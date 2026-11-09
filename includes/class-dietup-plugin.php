@@ -746,7 +746,7 @@ final class DietUp_Plugin {
             }
             echo '</td><td><span class="dietup-admin-status">'.esc_html($this->sms_status_label($r->sms_status ?? 'pending')).'</span>';
             if (!empty($r->sms_response)) { echo '<details style="min-width:180px;max-width:320px;margin-top:6px"><summary style="cursor:pointer">مشاهده لاگ پیامک</summary><pre style="white-space:pre-wrap;direction:rtl;max-width:100%;overflow-wrap:anywhere;font-size:11px;background:#f6f7f7;padding:8px">'.esc_html($r->sms_response).'</pre></details>'; }
-            echo '</td><td>'.esc_html($r->created_at).'</td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'" onsubmit="return confirm(\'هشدار: تمام اطلاعات ثبت‌نام، مدارک، گواهی و سوابق این فرد از دایت‌آپ برای همیشه حذف می‌شود. این کار قابل بازگشت نیست. ادامه می‌دهید؟\')"><input type="hidden" name="action" value="dietup_delete_registration"><input type="hidden" name="registration_id" value="'.esc_attr($r->id).'">
+            echo '</td><td>'.esc_html($r->created_at).'</td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'" onsubmit="return confirm(\'هشدار: تمام اطلاعات ثبت‌نام، مدارک، گواهی و سوابق این فرد از دایت‌آپ برای همیشه حذف می‌شود. این کار قابل بازگشت نیست. ادامه می‌دهید؟\')"><input type="hidden" name="action" value="dietup_delete_registration"><input type="hidden" name="registration_id" value="'.esc_attr($r->id).'">';
             wp_nonce_field('dietup_delete_registration_'.$r->id, 'dietup_delete_registration_nonce');
             echo '<button type="submit" class="button button-small dietup-delete-registration">حذف کامل</button></form></td></tr>';
         }} else { echo '<tr><td colspan="15">رکوردی مطابق فیلترها پیدا نشد.</td></tr>'; }
