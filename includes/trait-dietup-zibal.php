@@ -63,6 +63,10 @@ trait DietUp_Zibal_Trait {
             $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $row->id));
         }
 
+        if ('paid' === $row->payment_status) {
+            $this->send_paid_registration_sms($row->id);
+        }
+
         if ('paid' === $row->payment_status && 'pending' === $row->license_status) {
             // Prevent concurrent callbacks from issuing duplicate licenses.
             $claimed = $wpdb->query($wpdb->prepare(
