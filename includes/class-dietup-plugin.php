@@ -26,6 +26,7 @@ final class DietUp_Plugin {
         add_action('admin_menu', array($this, 'rename_admin_menu_label'), 999);
         add_action('admin_post_dietup_save_settings', array($this, 'save_settings'));
         add_action('admin_post_dietup_test_sms', array($this, 'test_sms'));
+        add_action('admin_post_dietup_send_registration_sms', array($this, 'send_registration_sms_manually'));
         add_action('admin_post_nopriv_dietup_zibal_callback', array($this, 'zibal_callback'));
         add_action('admin_post_dietup_zibal_callback', array($this, 'zibal_callback'));
         add_action('template_redirect', array($this, 'render_access_page'));
@@ -685,6 +686,36 @@ final class DietUp_Plugin {
         ), array('id' => $registration_id, 'sms_status' => 'sending'));
     }
 
+    /** Admin-only, one-time manual send for paid registrations whose SMS is still pending. */
+    public function send_registration_sms_manually() {
+        if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
+        $id = isset($_POST['registration_id']) ? absint($_POST['registration_id']) : 0;
+        if (!$id || !isset($_POST['dietup_send_registration_sms_nonce']) ||
+            !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_send_registration_sms_nonce'])), 'dietup_send_registration_sms_' . $id)) {
+            wp_die('درخواست ارسال پیامک نامعتبر است.');
+        }
+
+        global $wpdb;
+        $row = $wpdb->get_row($wpdb->prepare("SELECT id, payment_status, sms_status FROM {$this->table} WHERE id = %d", $id));
+        if (!$row || 'paid' !== $row->payment_status || 'pending' !== $row->sms_status) {
+            wp_safe_redirect(add_query_arg(array('page' => 'dietup', 'sms_manual' => 'not_allowed'), admin_url('admin.php')));
+            exit;
+        }
+
+        $settings = $this->get_settings();
+        if (empty($settings['melipayamak_username']) || empty($settings['melipayamak_password']) || empty($settings['melipayamak_pattern_code'])) {
+            wp_safe_redirect(add_query_arg(array('page' => 'dietup', 'sms_manual' => 'settings'), admin_url('admin.php')));
+            exit;
+        }
+
+        // Reuse the existing atomic claim and sender; concurrent clicks cannot send twice.
+        $this->send_paid_registration_sms($id);
+        $latest_status = $wpdb->get_var($wpdb->prepare("SELECT sms_status FROM {$this->table} WHERE id = %d", $id));
+        $result = ('sent' === $latest_status) ? 'sent' : (('failed' === $latest_status) ? 'failed' : 'busy');
+        wp_safe_redirect(add_query_arg(array('page' => 'dietup', 'sms_manual' => $result), admin_url('admin.php')));
+        exit;
+    }
+
     private function sms_status_label($status) {
         $labels = array('pending'=>'در انتظار ارسال','sending'=>'در حال ارسال','sent'=>'ارسال‌شده','failed'=>'ناموفق');
         return $labels[$status] ?? (string)$status;
@@ -720,6 +751,19 @@ final class DietUp_Plugin {
         @media(max-width:782px){.dietup-admin-wrap .widefat{display:block;overflow-x:auto;white-space:nowrap}}
         </style><h1>مدیریت ثبت‌نام دوره دایت‌آپ</h1>';
         if (isset($_GET['deleted']) && '1' === (string)$_GET['deleted']) { echo '<div class="notice notice-success is-dismissible"><p>اطلاعات ثبت‌نام و فایل‌های خصوصی مرتبط از دایت‌آپ حذف شدند.</p></div>'; }
+        if (isset($_GET['sms_manual'])) {
+            $sms_notice = sanitize_key(wp_unslash($_GET['sms_manual']));
+            $sms_messages = array(
+                'sent' => array('success', 'پیامک با موفقیت به سرویس ملی‌پیامک تحویل داده شد.'),
+                'failed' => array('error', 'ارسال پیامک ناموفق بود؛ جزئیات خطا را در لاگ همان ثبت‌نام ببینید.'),
+                'busy' => array('warning', 'وضعیت پیامک در حال تغییر است یا درخواست دیگری در حال پردازش آن است.'),
+                'settings' => array('error', 'تنظیمات ملی‌پیامک کامل نیست؛ ابتدا تنظیمات اتصال‌ها را بررسی کنید.'),
+                'not_allowed' => array('warning', 'این ثبت‌نام واجد شرایط ارسال پیامک نیست یا پیامک آن قبلاً پردازش شده است.'),
+            );
+            if (isset($sms_messages[$sms_notice])) {
+                echo '<div class="notice notice-' . esc_attr($sms_messages[$sms_notice][0]) . ' is-dismissible"><p>' . esc_html($sms_messages[$sms_notice][1]) . '</p></div>';
+            }
+        }
         echo '<div class="notice notice-warning"><p>حذف کامل، اطلاعات ثبت‌نام دایت‌آپ، مدارک بارگذاری‌شده، گواهی و تاریخچه بررسی را پاک می‌کند؛ حساب کاربری وردپرس و لایسنس ثبت‌شده در پنل SpotPlayer به‌صورت خودکار حذف یا باطل نمی‌شوند.</p></div>';
         echo '<div class="notice notice-info"><p>ثبت‌نام‌ها: <strong>'.esc_html(number_format_i18n((int)$stats->total)).'</strong> | پرداخت موفق: <strong>'.esc_html(number_format_i18n((int)$stats->paid_count)).'</strong> | فروش تأییدشده: <strong>'.esc_html(number_format_i18n((int)$stats->revenue)).' تومان</strong></p></div>';
         echo '<form method="get" style="display:flex;gap:8px;align-items:center;margin:14px 0"><input type="hidden" name="page" value="dietup"><input type="search" name="s" value="'.esc_attr($search).'" placeholder="نام، موبایل یا ایمیل">';
@@ -744,8 +788,16 @@ final class DietUp_Plugin {
                 wp_nonce_field('dietup_retry_license_' . $r->id, 'dietup_retry_nonce');
                 echo '<button class="button button-small">تلاش مجدد صدور لایسنس</button></form>';
             }
-            echo '</td><td><span class="dietup-admin-status">'.esc_html($this->sms_status_label($r->sms_status ?? 'pending')).'</span>';
+            $sms_state = isset($r->sms_status) ? $r->sms_status : 'pending';
+            echo '</td><td><span class="dietup-admin-status">'.esc_html($this->sms_status_label($sms_state)).'</span>';
             if (!empty($r->sms_response)) { echo '<details style="min-width:180px;max-width:320px;margin-top:6px"><summary style="cursor:pointer">مشاهده لاگ پیامک</summary><pre style="white-space:pre-wrap;direction:rtl;max-width:100%;overflow-wrap:anywhere;font-size:11px;background:#f6f7f7;padding:8px">'.esc_html($r->sms_response).'</pre></details>'; }
+            if ('paid' === $r->payment_status && 'pending' === $sms_state) {
+                echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" style="margin-top:8px" onsubmit="return confirm(\'پیامک الگوی ثبت‌نام برای این شماره ارسال شود؟ این عملیات فقط یک‌بار قابل انجام است.\')"><input type="hidden" name="action" value="dietup_send_registration_sms"><input type="hidden" name="registration_id" value="'.esc_attr($r->id).'">';
+                wp_nonce_field('dietup_send_registration_sms_'.$r->id, 'dietup_send_registration_sms_nonce');
+                echo '<button type="submit" class="button button-small button-primary">ارسال پیامک</button></form>';
+            } elseif ('paid' === $r->payment_status && 'failed' === $sms_state) {
+                echo '<small style="display:block;max-width:190px;margin-top:6px;color:#996515">ارسال مجدد خودکار غیرفعال است؛ برای جلوگیری از پیامک تکراری، وضعیت خطا را بررسی کنید.</small>';
+            }
             echo '</td><td>'.esc_html($r->created_at).'</td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'" onsubmit="return confirm(\'هشدار: تمام اطلاعات ثبت‌نام، مدارک، گواهی و سوابق این فرد از دایت‌آپ برای همیشه حذف می‌شود. این کار قابل بازگشت نیست. ادامه می‌دهید؟\')"><input type="hidden" name="action" value="dietup_delete_registration"><input type="hidden" name="registration_id" value="'.esc_attr($r->id).'">';
             wp_nonce_field('dietup_delete_registration_'.$r->id, 'dietup_delete_registration_nonce');
             echo '<button type="submit" class="button button-small dietup-delete-registration">حذف کامل</button></form></td></tr>';
