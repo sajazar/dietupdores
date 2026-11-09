@@ -566,7 +566,7 @@ final class DietUp_Plugin {
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
         echo '<tr><th>پرداخت آزمایشی</th><td><label><input type="checkbox" name="gateway_test_mode" value="1" '.checked(!empty($s['gateway_test_mode']), true, false).'> فعال‌سازی ثبت پرداخت موفق بدون اتصال به زیبال</label><p class="description"><strong>هشدار:</strong> در این حالت فقط مدیران سایت پرداخت شبیه‌سازی‌شده خواهند داشت؛ سایر کاربران همچنان به درگاه واقعی زیبال هدایت می‌شوند. بااین‌حال برای ثبت‌نام آزمایشی، درخواست صدور لایسنس واقعی به SpotPlayer ارسال می‌شود و ممکن است در حساب SpotPlayer شما لایسنس ثبت شود. پس از پایان تست، این گزینه را خاموش کنید.</p></td></tr>';
         echo '<tr><th><label for="dietup_telegram_url">لینک تلگرام دوره</label></th><td><input class="regular-text" type="url" id="dietup_telegram_url" name="telegram_url" value="' . esc_attr($s['telegram_url']) . '" placeholder="https://t.me/..."><p class="description">این لینک در پنل ثبت‌نام‌کنندگان پرداخت‌شده نمایش داده می‌شود.</p></td></tr>';
-        echo '</tbody></table><hr><h2>ملی‌پیامک</h2><p>ارسال پیامک اطلاع‌رسانی ثبت‌نام فقط پس از تأیید پرداخت انجام می‌شود و از وب‌سرویس خدماتی الگو استفاده می‌کند. الگو باید در پنل ملی‌پیامک تأیید شده باشد.</p><table class="form-table"><tbody>';
+        echo '</tbody></table><hr><h2>ملی‌پیامک</h2><p>ارسال پیامک اطلاع‌رسانی ثبت‌نام فقط پس از تأیید پرداخت انجام می‌شود. الگوی تأییدشده فعلی فقط یک متغیر دارد: <code>{0}</code> برای نام کاربر؛ لینک کانال داخل متن ثابت الگو قرار گرفته و افزونه لینک یا متغیر دومی ارسال نمی‌کند.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_melipayamak_username">نام کاربری</label></th><td><input class="regular-text" id="dietup_melipayamak_username" name="melipayamak_username" value="'.esc_attr($s['melipayamak_username']).'" autocomplete="off"></td></tr>';
         echo '<tr><th><label for="dietup_melipayamak_password">رمز عبور</label></th><td><input class="regular-text" type="password" id="dietup_melipayamak_password" name="melipayamak_password" value="" autocomplete="new-password" placeholder="'.($s['melipayamak_password'] ? 'رمز ذخیره شده است؛ برای حفظ آن خالی بگذارید' : 'رمز عبور پنل ملی‌پیامک').'">'.($s['melipayamak_password'] ? ' <label><input type="checkbox" name="clear_melipayamak_password" value="1"> حذف رمز ذخیره‌شده</label>' : '').'</td></tr>';
         echo '<tr><th><label for="dietup_melipayamak_pattern_code">شماره الگو (Pattern Code)</label></th><td><input class="regular-text" id="dietup_melipayamak_pattern_code" name="melipayamak_pattern_code" value="'.esc_attr($s['melipayamak_pattern_code']).'" placeholder="کد الگوی تأییدشده"></td></tr>';
@@ -656,8 +656,8 @@ final class DietUp_Plugin {
         if (!$mobile || !preg_match('/^(?:09[0-9]{9}|\\+989[0-9]{9}|989[0-9]{9})$/', $mobile)) {
             $this->sms_test_redirect('error', 'شماره موبایل تست معتبر نیست. ابتدا شماره را ذخیره کنید.');
         }
-        $sent = DietUp_Integrations::melipayamak_send_pattern($mobile, 'تست اتصال دایت‌آپ', (string)$s['telegram_url']);
-        if (is_wp_error($sent)) { $this->sms_test_redirect('error', $sent->get_error_message()); }
+        $sent = DietUp_Integrations::melipayamak_send_pattern($mobile, 'تست اتصال دایت‌آپ');
+        if (is_wp_error($sent)) { $this->sms_test_redirect('error', 'جزئیات تشخیصی: ' . $sent->get_error_message()); }
         $this->sms_test_redirect('success', 'درخواست ارسال پیامک آزمایشی با موفقیت به ملی‌پیامک تحویل داده شد. دریافت نهایی را روی گوشی و پنل بررسی کنید.');
     }
 
@@ -676,13 +676,18 @@ final class DietUp_Plugin {
         if (1 !== (int)$claimed) { return; }
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $registration_id));
         if (!$row) { return; }
-        $sent = DietUp_Integrations::melipayamak_send_pattern($row->mobile, $row->full_name, (string)$s['telegram_url']);
+        $sent = DietUp_Integrations::melipayamak_send_pattern($row->mobile, $row->full_name);
         $wpdb->update($this->table, array(
             'sms_status' => is_wp_error($sent) ? 'failed' : 'sent',
             'sms_sent_at' => is_wp_error($sent) ? null : current_time('mysql'),
             'sms_response' => is_wp_error($sent) ? sanitize_textarea_field($sent->get_error_message()) : sanitize_text_field((string)$sent),
             'updated_at' => current_time('mysql'),
         ), array('id' => $registration_id, 'sms_status' => 'sending'));
+    }
+
+    private function sms_status_label($status) {
+        $labels = array('pending'=>'در انتظار ارسال','sending'=>'در حال ارسال','sent'=>'ارسال‌شده','failed'=>'ناموفق');
+        return $labels[$status] ?? (string)$status;
     }
 
     public function admin_page() {
@@ -731,7 +736,7 @@ final class DietUp_Plugin {
         wp_nonce_field('dietup_export_xlsx', 'dietup_xlsx_nonce');
         echo '<input type="hidden" name="payment_status" value="' . esc_attr($status) . '"><input type="hidden" name="package_key" value="' . esc_attr($package) . '"><input type="hidden" name="s" value="' . esc_attr($search) . '">';
         echo '<button class="button">دریافت فایل Excel (XLSX)</button></form><p>برای جلوگیری از کندی، حداکثر ۵۰۰ رکورد در این فهرست نمایش داده می‌شود.</p>';
-        echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>تخصص / رشته</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ نهایی / تخفیف</th><th>پرداخت</th><th>لایسنس</th><th>تاریخ</th><th>عملیات</th></tr></thead><tbody>';
+        echo '<table class="widefat striped"><thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>ایمیل</th><th>دانشگاه</th><th>گروه حرفه‌ای</th><th>تخصص / رشته</th><th>محل فعالیت</th><th>پکیج</th><th>مبلغ نهایی / تخفیف</th><th>پرداخت</th><th>لایسنس</th><th>پیامک</th><th>تاریخ</th><th>عملیات</th></tr></thead><tbody>';
         if ($rows) { foreach ($rows as $r) {
             echo '<tr><td>'.esc_html($r->id).'</td><td><strong>'.esc_html($r->full_name).'</strong></td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->specialty).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.(!empty($r->discount_amount) ? '<small>قیمت اولیه: '.esc_html(number_format_i18n((int)$r->base_package_price)).' تومان<br>تخفیف: '.esc_html(number_format_i18n((int)$r->discount_amount)).' تومان ('.esc_html((int)$r->discount_percent).'٪) | '.esc_html($r->discount_code).'<br></small>' : '').'<strong>'.esc_html(number_format_i18n($r->package_price)).' تومان</strong></td><td><span class="dietup-admin-status">'.esc_html(('test' === $r->payment_gateway && 'paid' === $r->payment_status) ? 'موفق (آزمایشی)' : $this->payment_label($r->payment_status)).'</span></td><td><span class="dietup-admin-status">'.esc_html($this->license_label($r->license_status)).'</span>';
             if ('failed' === $r->license_status && 'paid' === $r->payment_status) {
@@ -739,7 +744,9 @@ final class DietUp_Plugin {
                 wp_nonce_field('dietup_retry_license_' . $r->id, 'dietup_retry_nonce');
                 echo '<button class="button button-small">تلاش مجدد صدور لایسنس</button></form>';
             }
-            echo '</td><td>'.esc_html($r->created_at).'</td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'" onsubmit="return confirm(\'هشدار: تمام اطلاعات ثبت‌نام، مدارک، گواهی و سوابق این فرد از دایت‌آپ برای همیشه حذف می‌شود. این کار قابل بازگشت نیست. ادامه می‌دهید؟\')"><input type="hidden" name="action" value="dietup_delete_registration"><input type="hidden" name="registration_id" value="'.esc_attr($r->id).'">';
+            echo '</td><td><span class="dietup-admin-status">'.esc_html($this->sms_status_label($r->sms_status ?? 'pending')).'</span>';
+            if (!empty($r->sms_response)) { echo '<details style="min-width:180px;max-width:320px;margin-top:6px"><summary style="cursor:pointer">مشاهده لاگ پیامک</summary><pre style="white-space:pre-wrap;direction:rtl;max-width:100%;overflow-wrap:anywhere;font-size:11px;background:#f6f7f7;padding:8px">'.esc_html($r->sms_response).'</pre></details>'; }
+            echo '</td><td>'.esc_html($r->created_at).'</td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'" onsubmit="return confirm(\'هشدار: تمام اطلاعات ثبت‌نام، مدارک، گواهی و سوابق این فرد از دایت‌آپ برای همیشه حذف می‌شود. این کار قابل بازگشت نیست. ادامه می‌دهید؟\')"><input type="hidden" name="action" value="dietup_delete_registration"><input type="hidden" name="registration_id" value="'.esc_attr($r->id).'">
             wp_nonce_field('dietup_delete_registration_'.$r->id, 'dietup_delete_registration_nonce');
             echo '<button type="submit" class="button button-small dietup-delete-registration">حذف کامل</button></form></td></tr>';
         }} else { echo '<tr><td colspan="14">رکوردی مطابق فیلترها پیدا نشد.</td></tr>'; }
