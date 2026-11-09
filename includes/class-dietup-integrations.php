@@ -6,6 +6,35 @@ if (!defined('ABSPATH')) { exit; }
  * Amounts stored by DietUp are Toman; Zibal expects Rial.
  */
 final class DietUp_Integrations {
+    /** Send a two-variable approved pattern through Melipayamak shared-service endpoint. */
+    public static function melipayamak_send_pattern($mobile, $full_name, $telegram_url) {
+        $s = get_option('dietup_integration_settings', array());
+        $username = isset($s['melipayamak_username']) ? trim((string)$s['melipayamak_username']) : '';
+        $password = isset($s['melipayamak_password']) ? trim((string)$s['melipayamak_password']) : '';
+        $body_id = isset($s['melipayamak_pattern_code']) ? trim((string)$s['melipayamak_pattern_code']) : '';
+        $mobile = preg_replace('/[^0-9+]/', '', (string)$mobile);
+        if (!$username || !$password || !$body_id) { return new WP_Error('dietup_sms_config', 'اطلاعات اتصال ملی‌پیامک یا کد الگو کامل نیست.'); }
+        if (!preg_match('/^(?:09[0-9]{9}|\\+989[0-9]{9}|989[0-9]{9})$/', $mobile)) { return new WP_Error('dietup_sms_mobile', 'شماره موبایل گیرنده معتبر نیست.'); }
+        $response = wp_remote_post('https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber2', array(
+            'timeout' => 25,
+            'headers' => array('Content-Type' => 'application/x-www-form-urlencoded; charset=UTF-8'),
+            'body' => array(
+                'username' => $username,
+                'password' => $password,
+                'text' => sanitize_text_field((string)$full_name) . ';' . esc_url_raw((string)$telegram_url),
+                'to' => $mobile,
+                'bodyId' => $body_id,
+            ),
+        ));
+        if (is_wp_error($response)) { return new WP_Error('dietup_sms_network', 'ارتباط با وب‌سرویس ملی‌پیامک برقرار نشد: ' . $response->get_error_message()); }
+        $http = (int)wp_remote_retrieve_response_code($response);
+        $raw = trim((string)wp_remote_retrieve_body($response));
+        if ($http < 200 || $http >= 300) { return new WP_Error('dietup_sms_http', 'ملی‌پیامک پاسخ HTTP ناموفق برگرداند: ' . $http); }
+        if (preg_match('/^\\d{16,}$/', $raw)) { return $raw; }
+        $messages = array('0'=>'نام کاربری یا رمز عبور ملی‌پیامک اشتباه است.','-1'=>'خطای داخلی ملی‌پیامک.','-2'=>'اعتبار پنل کافی نیست.','-3'=>'محدودیت ارسال یا دسترسی وب‌سرویس.','-4'=>'شماره گیرنده نامعتبر است.');
+        return new WP_Error('dietup_sms_rejected', $messages[$raw] ?? ('ملی‌پیامک درخواست را نپذیرفت. کد پاسخ: ' . sanitize_text_field($raw)));
+    }
+
     public static function zibal_request($registration, $access_token = '') {
         $s = get_option('dietup_integration_settings', array());
         $merchant = isset($s['gateway_merchant_id']) ? trim($s['gateway_merchant_id']) : '';
