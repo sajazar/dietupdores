@@ -5,6 +5,7 @@
         return Math.max(0, Number(value) || 0).toLocaleString('fa-IR') + ' تومان';
     }
 
+    function initDietUpForms() {
     document.querySelectorAll('.dietup-form').forEach(function (form) {
         var workplace = form.querySelector('[data-dietup-workplace]');
         var other = form.querySelector('[data-dietup-other]');
@@ -164,4 +165,11 @@
         refresh();
         showBasePrice();
     });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initDietUpForms, {once: true});
+    } else {
+        initDietUpForms();
+    }
 }());
