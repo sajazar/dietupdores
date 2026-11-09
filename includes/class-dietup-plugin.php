@@ -25,6 +25,7 @@ final class DietUp_Plugin {
         add_action('admin_menu', array($this, 'admin_menu'));
         add_action('admin_menu', array($this, 'rename_admin_menu_label'), 999);
         add_action('admin_post_dietup_save_settings', array($this, 'save_settings'));
+        add_action('admin_post_dietup_test_sms', array($this, 'test_sms'));
         add_action('admin_post_nopriv_dietup_zibal_callback', array($this, 'zibal_callback'));
         add_action('admin_post_dietup_zibal_callback', array($this, 'zibal_callback'));
         add_action('template_redirect', array($this, 'render_access_page'));
@@ -76,6 +77,9 @@ final class DietUp_Plugin {
             payment_ref_id varchar(190) NULL,
             paid_at datetime NULL,
             license_status varchar(30) NOT NULL DEFAULT 'not_issued',
+            sms_status varchar(30) NOT NULL DEFAULT 'pending',
+            sms_sent_at datetime NULL,
+            sms_response text NULL,
             license_id varchar(190) NULL,
             license_key text NULL,
             access_token_hash char(64) NULL,
@@ -521,6 +525,10 @@ final class DietUp_Plugin {
             'gateway_sandbox' => 1,
             'gateway_test_mode' => 0,
             'telegram_url' => '',
+            'melipayamak_username' => '',
+            'melipayamak_password' => '',
+            'melipayamak_pattern_code' => '',
+            'melipayamak_test_mobile' => '',
             'coupon_code' => '',
             'coupon_percent' => 0,
             'spotplayer_api_url' => '',
@@ -534,6 +542,8 @@ final class DietUp_Plugin {
         if (!current_user_can('manage_options')) { wp_die(esc_html__('دسترسی غیرمجاز', 'dietup')); }
         $s = $this->get_settings();
         echo '<div class="wrap"><h1>تنظیمات درگاه پرداخت و SpotPlayer</h1>';
+        $sms_notice = get_transient('dietup_sms_test_notice_' . get_current_user_id());
+        if ($sms_notice) { delete_transient('dietup_sms_test_notice_' . get_current_user_id()); echo '<div class="notice '.('success' === $sms_notice['status'] ? 'notice-success' : 'notice-error').' is-dismissible"><p>'.esc_html($sms_notice['message']).'</p></div>'; }
         if (isset($_GET['settings_saved']) && '1' === $_GET['settings_saved']) {
             echo '<div class="notice notice-success is-dismissible"><p>تنظیمات ذخیره شد.</p></div>';
         }
@@ -556,6 +566,11 @@ final class DietUp_Plugin {
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
         echo '<tr><th>پرداخت آزمایشی</th><td><label><input type="checkbox" name="gateway_test_mode" value="1" '.checked(!empty($s['gateway_test_mode']), true, false).'> فعال‌سازی ثبت پرداخت موفق بدون اتصال به زیبال</label><p class="description"><strong>هشدار:</strong> در این حالت فقط مدیران سایت پرداخت شبیه‌سازی‌شده خواهند داشت؛ سایر کاربران همچنان به درگاه واقعی زیبال هدایت می‌شوند. بااین‌حال برای ثبت‌نام آزمایشی، درخواست صدور لایسنس واقعی به SpotPlayer ارسال می‌شود و ممکن است در حساب SpotPlayer شما لایسنس ثبت شود. پس از پایان تست، این گزینه را خاموش کنید.</p></td></tr>';
         echo '<tr><th><label for="dietup_telegram_url">لینک تلگرام دوره</label></th><td><input class="regular-text" type="url" id="dietup_telegram_url" name="telegram_url" value="' . esc_attr($s['telegram_url']) . '" placeholder="https://t.me/..."><p class="description">این لینک در پنل ثبت‌نام‌کنندگان پرداخت‌شده نمایش داده می‌شود.</p></td></tr>';
+        echo '</tbody></table><hr><h2>ملی‌پیامک</h2><p>ارسال پیامک اطلاع‌رسانی ثبت‌نام فقط پس از تأیید پرداخت انجام می‌شود و از وب‌سرویس خدماتی الگو استفاده می‌کند. الگو باید در پنل ملی‌پیامک تأیید شده باشد.</p><table class="form-table"><tbody>';
+        echo '<tr><th><label for="dietup_melipayamak_username">نام کاربری</label></th><td><input class="regular-text" id="dietup_melipayamak_username" name="melipayamak_username" value="'.esc_attr($s['melipayamak_username']).'" autocomplete="off"></td></tr>';
+        echo '<tr><th><label for="dietup_melipayamak_password">رمز عبور</label></th><td><input class="regular-text" type="password" id="dietup_melipayamak_password" name="melipayamak_password" value="" autocomplete="new-password" placeholder="'.($s['melipayamak_password'] ? 'رمز ذخیره شده است؛ برای حفظ آن خالی بگذارید' : 'رمز عبور پنل ملی‌پیامک').'">'.($s['melipayamak_password'] ? ' <label><input type="checkbox" name="clear_melipayamak_password" value="1"> حذف رمز ذخیره‌شده</label>' : '').'</td></tr>';
+        echo '<tr><th><label for="dietup_melipayamak_pattern_code">شماره الگو (Pattern Code)</label></th><td><input class="regular-text" id="dietup_melipayamak_pattern_code" name="melipayamak_pattern_code" value="'.esc_attr($s['melipayamak_pattern_code']).'" placeholder="کد الگوی تأییدشده"></td></tr>';
+        echo '<tr><th><label for="dietup_melipayamak_test_mobile">شماره موبایل برای تست اتصال</label></th><td><input class="regular-text" type="tel" id="dietup_melipayamak_test_mobile" name="melipayamak_test_mobile" value="'.esc_attr($s['melipayamak_test_mobile']).'" placeholder="0912xxxxxxx" dir="ltr"><p class="description">ابتدا تنظیمات را ذخیره کنید، سپس دکمه تست را بزنید. تست یک پیامک واقعی با هزینه پنل ارسال می‌کند.</p></td></tr>';
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_spotplayer_api_key">API Key</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_spotplayer_api_key" name="spotplayer_api_key" value="" placeholder="'.($s['spotplayer_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'SpotPlayer API Key').'"><p class="description">کلید فعلی نمایش داده نمی‌شود.</p>'.($s['spotplayer_api_key'] ? '<label><input type="checkbox" name="clear_spotplayer_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
         echo '<tr><th><label for="dietup_spotplayer_course_id">شناسه دوره / Course ID</label></th><td><input class="regular-text" id="dietup_spotplayer_course_id" name="spotplayer_course_id" value="'.esc_attr($s['spotplayer_course_id']).'"></td></tr>';
@@ -565,7 +580,10 @@ final class DietUp_Plugin {
         }
         echo '<p class="description">فقط برای پکیج‌های انتخاب‌شده درخواست صدور لایسنس به SpotPlayer ارسال می‌شود. اگر هیچ پکیجی انتخاب نشود، برای هیچ ثبت‌نامی لایسنس صادر نخواهد شد. این محدودیت در سمت سرور نیز بررسی می‌شود.</p></td></tr>';
         echo '</tbody></table>';
-        echo '<p class="submit"><button type="submit" class="button button-primary">ذخیره تنظیمات اتصال</button></p></form></div>';
+        echo '<p class="submit"><button type="submit" class="button button-primary">ذخیره تنظیمات اتصال</button></p></form>';
+        echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" style="margin-top:12px"><input type="hidden" name="action" value="dietup_test_sms">';
+        wp_nonce_field('dietup_sms_test', 'dietup_sms_test_nonce');
+        echo '<button type="submit" class="button button-secondary">تست اتصال و ارسال پیامک آزمایشی</button><p class="description">پیش از تست، نام کاربری، رمز، کد الگو و شماره موبایل را ذخیره کنید. این عملیات یک پیامک واقعی ارسال می‌کند.</p></form></div>';
     }
 
     public function save_settings() {
@@ -619,9 +637,52 @@ final class DietUp_Plugin {
                 $new[$secret] = sanitize_text_field(wp_unslash($_POST[$secret]));
             }
         }
+        $new['melipayamak_username'] = isset($_POST['melipayamak_username']) ? sanitize_text_field(wp_unslash($_POST['melipayamak_username'])) : '';
+        $new['melipayamak_pattern_code'] = isset($_POST['melipayamak_pattern_code']) ? sanitize_text_field(wp_unslash($_POST['melipayamak_pattern_code'])) : '';
+        $new['melipayamak_test_mobile'] = isset($_POST['melipayamak_test_mobile']) ? preg_replace('/[^0-9+]/', '', sanitize_text_field(wp_unslash($_POST['melipayamak_test_mobile']))) : '';
+        if (!empty($_POST['clear_melipayamak_password'])) { $new['melipayamak_password'] = ''; }
+        elseif (isset($_POST['melipayamak_password']) && '' !== trim((string)wp_unslash($_POST['melipayamak_password']))) { $new['melipayamak_password'] = sanitize_text_field(wp_unslash($_POST['melipayamak_password'])); }
         update_option('dietup_integration_settings', $new, false);
         wp_safe_redirect(add_query_arg(array('page'=>'dietup-settings','settings_saved'=>'1'), admin_url('admin.php')));
         exit;
+    }
+
+
+    public function test_sms() {
+        if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
+        if (!isset($_POST['dietup_sms_test_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dietup_sms_test_nonce'])), 'dietup_sms_test')) { wp_die('درخواست نامعتبر است.'); }
+        $s = $this->get_settings();
+        $mobile = preg_replace('/[^0-9+]/', '', (string)$s['melipayamak_test_mobile']);
+        if (!$mobile || !preg_match('/^(?:09[0-9]{9}|\\+989[0-9]{9}|989[0-9]{9})$/', $mobile)) {
+            $this->sms_test_redirect('error', 'شماره موبایل تست معتبر نیست. ابتدا شماره را ذخیره کنید.');
+        }
+        $sent = DietUp_Integrations::melipayamak_send_pattern($mobile, 'تست اتصال دایت‌آپ', (string)$s['telegram_url']);
+        if (is_wp_error($sent)) { $this->sms_test_redirect('error', $sent->get_error_message()); }
+        $this->sms_test_redirect('success', 'درخواست ارسال پیامک آزمایشی با موفقیت به ملی‌پیامک تحویل داده شد. دریافت نهایی را روی گوشی و پنل بررسی کنید.');
+    }
+
+    private function sms_test_redirect($status, $message) {
+        set_transient('dietup_sms_test_notice_' . get_current_user_id(), array('status'=>$status, 'message'=>$message), 60);
+        wp_safe_redirect(add_query_arg(array('page'=>'dietup-settings','sms_test'=>$status), admin_url('admin.php')));
+        exit;
+    }
+
+    /** Send the paid-registration notification once; an ambiguous provider response is never auto-retried. */
+    public function send_paid_registration_sms($registration_id) {
+        global $wpdb;
+        $s = $this->get_settings();
+        if (empty($s['melipayamak_username']) || empty($s['melipayamak_password']) || empty($s['melipayamak_pattern_code'])) { return; }
+        $claimed = $wpdb->query($wpdb->prepare("UPDATE {$this->table} SET sms_status = 'sending', updated_at = %s WHERE id = %d AND payment_status = 'paid' AND sms_status = 'pending'", current_time('mysql'), $registration_id));
+        if (1 !== (int)$claimed) { return; }
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $registration_id));
+        if (!$row) { return; }
+        $sent = DietUp_Integrations::melipayamak_send_pattern($row->mobile, $row->full_name, (string)$s['telegram_url']);
+        $wpdb->update($this->table, array(
+            'sms_status' => is_wp_error($sent) ? 'failed' : 'sent',
+            'sms_sent_at' => is_wp_error($sent) ? null : current_time('mysql'),
+            'sms_response' => is_wp_error($sent) ? sanitize_textarea_field($sent->get_error_message()) : sanitize_text_field((string)$sent),
+            'updated_at' => current_time('mysql'),
+        ), array('id' => $registration_id, 'sms_status' => 'sending'));
     }
 
     public function admin_page() {
