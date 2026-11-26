@@ -140,10 +140,12 @@ final class DietUp_Plugin {
             echo '<p>شماره ثبت‌نام: ' . esc_html($row->id) . ' | تاریخ: ' . esc_html($row->created_at) . '</p>';
             echo '<p>وضعیت پرداخت: <strong>' . esc_html($this->payment_label($row->payment_status)) . '</strong></p>';
             if ('paid' === $row->payment_status) {
-                if (DietUp_Integrations::spotplayer_package_enabled($row->package_key)) { echo '<p>وضعیت لایسنس: ' . esc_html($this->license_label($row->license_status)) . '</p>'; }
-                if ('issued' === $row->license_status && $row->license_key && DietUp_Integrations::spotplayer_package_enabled($row->package_key)) { echo '<label>کلید لایسنس SpotPlayer</label><textarea readonly style="width:100%;min-height:90px;direction:ltr">' . esc_textarea($row->license_key) . '</textarea>'; }
-                elseif ('failed' === $row->license_status) { echo '<p>صدور لایسنس ناموفق بود؛ لطفاً با پشتیبانی تماس بگیرید.</p>'; }
-                elseif ('unknown' === $row->license_status) { echo '<p>نتیجه صدور لایسنس نیازمند بررسی دستی در پنل SpotPlayer است.</p>'; }
+                if (DietUp_Integrations::spotplayer_package_enabled($row->package_key)) {
+                    echo '<p>وضعیت لایسنس: ' . esc_html($this->license_label($row->license_status)) . '</p>';
+                    if ('issued' === $row->license_status && $row->license_key) { echo '<label>کلید لایسنس SpotPlayer</label><textarea readonly style="width:100%;min-height:90px;direction:ltr">' . esc_textarea($row->license_key) . '</textarea>'; }
+                    elseif ('failed' === $row->license_status) { echo '<p>صدور لایسنس ناموفق بود؛ لطفاً با پشتیبانی تماس بگیرید.</p>'; }
+                    elseif ('unknown' === $row->license_status) { echo '<p>نتیجه صدور لایسنس نیازمند بررسی دستی در پنل SpotPlayer است.</p>'; }
+                }
                 if ('complete' === $row->package_key) {
                     $resources = DietUp_Private_Files::resources();
                     if (!empty($resources['booklet']['path']) && is_file($resources['booklet']['path'])) { echo '<p><a href="' . esc_url(DietUp_Private_Files::account_download_url((int)$row->id, 'booklet')) . '">دانلود جزوه دوره (PDF)</a></p>'; }
@@ -455,7 +457,7 @@ final class DietUp_Plugin {
             $this->redirect_status('error');
         }
         $settings = $this->get_settings();
-        // Simulated payment is restricted to administrators; every paid package receives its own SpotPlayer license.
+        // Simulated payment is restricted to administrators. SpotPlayer issuance is limited to the package selected in settings.
         if (!empty($settings['gateway_test_mode']) && current_user_can('manage_options')) {
             $wpdb->update($this->table, array(
                 'payment_status' => 'paid',
@@ -466,11 +468,13 @@ final class DietUp_Plugin {
                 'updated_at' => current_time('mysql'),
             ), array('id' => $registration_id));
 
-            // Claim issuance atomically; package visibility settings do not restrict license creation.
-            $claimed = $wpdb->query($wpdb->prepare(
-                "UPDATE {$this->table} SET license_status = 'issuing', updated_at = %s WHERE id = %d AND payment_status = 'paid' AND payment_gateway = 'test' AND license_status = 'pending'",
-                current_time('mysql'), $registration_id
-            ));
+            // Only the package explicitly selected in SpotPlayer settings may create a license.
+            $claimed = DietUp_Integrations::spotplayer_package_enabled($package_key)
+                ? $wpdb->query($wpdb->prepare(
+                    "UPDATE {$this->table} SET license_status = 'issuing', updated_at = %s WHERE id = %d AND payment_status = 'paid' AND payment_gateway = 'test' AND license_status = 'pending'",
+                    current_time('mysql'), $registration_id
+                ))
+                : 0;
             if (1 === (int)$claimed) {
                 $registration = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $registration_id));
                 $license = $registration ? DietUp_Integrations::spotplayer_license($registration) : new WP_Error('dietup_spot_registration', 'اطلاعات ثبت‌نام برای صدور لایسنس پیدا نشد.');
@@ -587,11 +591,12 @@ final class DietUp_Plugin {
         echo '</tbody></table><hr><h2>SpotPlayer</h2><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_spotplayer_api_key">API Key</label></th><td><input class="regular-text" type="password" autocomplete="new-password" id="dietup_spotplayer_api_key" name="spotplayer_api_key" value="" placeholder="'.($s['spotplayer_api_key'] ? 'کلید ذخیره شده است؛ برای حفظ مقدار فعلی خالی بگذارید' : 'SpotPlayer API Key').'"><p class="description">کلید فعلی نمایش داده نمی‌شود.</p>'.($s['spotplayer_api_key'] ? '<label><input type="checkbox" name="clear_spotplayer_api_key" value="1"> حذف کلید ذخیره‌شده</label>' : '').'</td></tr>';
         echo '<tr><th><label for="dietup_spotplayer_course_id">شناسه دوره / Course ID</label></th><td><input class="regular-text" id="dietup_spotplayer_course_id" name="spotplayer_course_id" value="'.esc_attr($s['spotplayer_course_id']).'"></td></tr>';
-        echo '<tr><th>پکیج‌های مجاز برای صدور لایسنس SpotPlayer</th><td>';
+        echo '<tr><th>پکیج دارای لایسنس SpotPlayer</th><td>';
+        $selected_spotplayer_package = !empty($s['spotplayer_issue_packages']) && is_array($s['spotplayer_issue_packages']) ? sanitize_key(reset($s['spotplayer_issue_packages'])) : '';
         foreach (array('online'=>'پکیج آنلاین','certificate'=>'پکیج آنلاین + گواهی','complete'=>'پکیج کامل') as $package_key=>$package_label) {
-            echo '<label style="display:inline-block;margin:0 0 8px 0"><input type="checkbox" name="spotplayer_issue_packages[]" value="'.esc_attr($package_key).'" '.checked(in_array($package_key, (array)$s['spotplayer_issue_packages'], true), true, false).'> '.esc_html($package_label).'</label><br>';
+            echo '<label style="display:inline-block;margin:0 0 8px 0"><input type="radio" name="spotplayer_issue_package" value="'.esc_attr($package_key).'" '.checked($selected_spotplayer_package, $package_key, false).'> '.esc_html($package_label).'</label><br>';
         }
-        echo '<p class="description">فقط برای پکیج‌های انتخاب‌شده درخواست صدور لایسنس به SpotPlayer ارسال می‌شود. اگر هیچ پکیجی انتخاب نشود، برای هیچ ثبت‌نامی لایسنس صادر نخواهد شد. این محدودیت در سمت سرور نیز بررسی می‌شود.</p></td></tr>';
+        echo '<p class="description">فقط خریدارِ همین یک پکیج، پس از پرداخت موفق، برای صدور لایسنس به SpotPlayer ارسال می‌شود. برای دو پکیج دیگر هیچ درخواستی ارسال و هیچ لایسنسی ساخته نمی‌شود. این محدودیت در صدور سمت سرور و نمایش کلید پنل کاربر اعمال می‌شود.</p></td></tr>';
         echo '</tbody></table>';
         echo '<p class="submit"><button type="submit" class="button button-primary">ذخیره تنظیمات اتصال</button></p></form>';
         echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" style="margin-top:12px"><input type="hidden" name="action" value="dietup_test_sms">';
@@ -633,8 +638,8 @@ final class DietUp_Plugin {
         }
         $new['gateway_sandbox'] = isset($_POST['gateway_sandbox']) ? 1 : 0;
         $new['gateway_test_mode'] = isset($_POST['gateway_test_mode']) ? 1 : 0;
-        $issue_packages = isset($_POST['spotplayer_issue_packages']) && is_array($_POST['spotplayer_issue_packages']) ? array_map('sanitize_key', wp_unslash($_POST['spotplayer_issue_packages'])) : array();
-        $new['spotplayer_issue_packages'] = array_values(array_intersect(array('online','certificate','complete'), $issue_packages));
+        $selected_package = isset($_POST['spotplayer_issue_package']) ? sanitize_key(wp_unslash($_POST['spotplayer_issue_package'])) : '';
+        $new['spotplayer_issue_packages'] = in_array($selected_package, array('online','certificate','complete'), true) ? array($selected_package) : array();
         $package_input = isset($_POST['packages']) && is_array($_POST['packages']) ? wp_unslash($_POST['packages']) : array();
         $package_defaults = array(
             'online' => array('title'=>'پکیج آنلاین','price'=>990000,'old'=>9900000,'features'=>array('دسترسی آنلاین به دوره')),
