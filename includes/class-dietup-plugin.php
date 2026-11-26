@@ -803,7 +803,7 @@ final class DietUp_Plugin {
         @media(max-width:782px){.dietup-admin-wrap .widefat{display:block;overflow-x:auto;white-space:nowrap}}
         </style><h1>مدیریت ثبت‌نام دوره دایت‌آپ</h1>';
         if (isset($_GET['deleted']) && '1' === (string)$_GET['deleted']) { echo '<div class="notice notice-success is-dismissible"><p>اطلاعات ثبت‌نام و فایل‌های خصوصی مرتبط از دایت‌آپ حذف شدند.</p></div>'; }
-        if (isset($_GET['license_manual'])) { $license_manual_status = sanitize_key(wp_unslash($_GET['license_manual'])); $license_notice = 'issued' === $license_manual_status ? 'لایسنس جدید SpotPlayer با موفقیت صادر و در پنل کاربر ذخیره شد.' : ('recovered' === $license_manual_status ? 'لایسنس قبلی در SpotPlayer پیدا شد؛ همان کلید بازیابی و در پنل کاربر ذخیره شد.' : ('lookup_failed' === $license_manual_status ? 'بررسی لایسنس‌های SpotPlayer ناموفق بود؛ برای جلوگیری از صدور تکراری، هیچ لایسنس جدیدی صادر نشد.' : 'صدور لایسنس با خطا مواجه شد؛ وضعیت ثبت‌نام را بررسی کنید.')); $license_notice_type = in_array($license_manual_status, array('issued','recovered'), true) ? 'success' : 'error'; $license_diag = get_transient('dietup_spot_lookup_diag_' . get_current_user_id()); if ('lookup_failed' === $license_manual_status && is_string($license_diag) && '' !== $license_diag) { delete_transient('dietup_spot_lookup_diag_' . get_current_user_id()); $license_notice .= ' جزئیات فنی: ' . $license_diag; } echo '<div class="notice notice-'.esc_attr($license_notice_type).' is-dismissible"><p>'.esc_html($license_notice).'</p></div>'; }
+        if (isset($_GET['license_manual'])) { $license_manual_status = sanitize_key(wp_unslash($_GET['license_manual'])); $license_notice = 'issued' === $license_manual_status ? 'درخواست صدور لایسنس به SpotPlayer ارسال شد و لایسنس با موفقیت در پنل کاربر ذخیره شد.' : 'صدور لایسنس با خطا مواجه شد؛ وضعیت ثبت‌نام را بررسی کنید.'; $license_notice_type = 'issued' === $license_manual_status ? 'success' : 'error'; echo '<div class="notice notice-'.esc_attr($license_notice_type).' is-dismissible"><p>'.esc_html($license_notice).'</p></div>'; }
         if (isset($_GET['sms_manual'])) {
             $sms_notice = sanitize_key(wp_unslash($_GET['sms_manual']));
             $sms_messages = array(
@@ -844,11 +844,11 @@ final class DietUp_Plugin {
             if ('paid' === $r->payment_status && DietUp_Integrations::spotplayer_package_enabled($r->package_key) && in_array($r->license_status, array('not_issued','failed','unknown'), true) && empty($r->license_id) && empty($r->license_key)) {
                 $is_unknown_license = ('unknown' === $r->license_status);
                 $confirm_message = $is_unknown_license
-                    ? 'ابتدا سامانه به‌صورت خودکار در SpotPlayer دنبال لایسنس همین ثبت‌نام می‌گردد. اگر پیدا شود همان کلید بازیابی می‌شود و اگر پیدا نشود صدور جدید انجام می‌شود. ادامه می‌دهید؟'
+                    ? 'یک درخواست صدور جدید برای این ثبت‌نام به SpotPlayer ارسال می‌شود. اگر درخواست قبلی در SpotPlayer ثبت شده ولی پاسخ آن ذخیره نشده باشد، احتمال ایجاد لایسنس تکراری وجود دارد. ادامه می‌دهید؟'
                     : 'برای این ثبت‌نام درخواست صدور لایسنس SpotPlayer ارسال شود؟';
                 echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return confirm(' . esc_attr(wp_json_encode($confirm_message)) . ')"><input type="hidden" name="action" value="dietup_manual_issue_license"><input type="hidden" name="registration_id" value="' . esc_attr($r->id) . '">';
                 wp_nonce_field('dietup_manual_issue_license_' . $r->id, 'dietup_manual_issue_license_nonce');
-                echo '<button class="button button-small button-primary">' . ($is_unknown_license ? 'بررسی و بازیابی / صدور لایسنس' : 'صدور دستی لایسنس') . '</button></form>';
+                echo '<button class="button button-small button-primary">' . ($is_unknown_license ? 'ارسال مجدد درخواست صدور' : 'صدور دستی لایسنس') . '</button></form>';
             }
             $sms_state = isset($r->sms_status) ? $r->sms_status : 'pending';
             echo '</td><td><span class="dietup-admin-status">'.esc_html($this->sms_status_label($sms_state)).'</span>';
@@ -896,9 +896,11 @@ final class DietUp_Plugin {
         global $wpdb;
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id=%d", $id));
         if (!$row || 'paid' !== $row->payment_status || !DietUp_Integrations::spotplayer_package_enabled($row->package_key) || !in_array($row->license_status, array('not_issued','failed','unknown'), true) || !empty($row->license_id) || !empty($row->license_key)) {
-            wp_die('این ثبت‌نام واجد شرایط بررسی یا صدور لایسنس نیست؛ وضعیت یا اطلاعات لایسنس تغییر کرده است.');
+            wp_die('این ثبت‌نام واجد شرایط صدور دستی لایسنس نیست؛ وضعیت یا اطلاعات لایسنس تغییر کرده است.');
         }
 
+        // Manual action: send a fresh create-license request for this paid registration only.
+        // No account-wide license listing or pagination is performed.
         $previous_status = $row->license_status;
         $claimed = $wpdb->query($wpdb->prepare(
             "UPDATE {$this->table} SET license_status='issuing', updated_at=%s WHERE id=%d AND payment_status='paid' AND license_status=%s AND (license_id IS NULL OR license_id='') AND (license_key IS NULL OR license_key='')",
@@ -906,26 +908,8 @@ final class DietUp_Plugin {
         ));
         if (1 !== (int)$claimed) { wp_die('این درخواست قبلاً پردازش شده یا وضعیت ثبت‌نام تغییر کرده است.'); }
 
-        $license = null;
-        if ('unknown' === $previous_status) {
-            // Reconcile ambiguous earlier requests first. Never create a new license unless
-            // the complete SpotPlayer license listing confirms the exact payload is absent.
-            $lookup = DietUp_Integrations::spotplayer_find_license_by_payload('dietup-order-' . (int)$row->id);
-            if (is_wp_error($lookup)) {
-                set_transient('dietup_spot_lookup_diag_' . get_current_user_id(), sanitize_text_field($lookup->get_error_code() . ': ' . $lookup->get_error_message()), 5 * MINUTE_IN_SECONDS);
-                $wpdb->update($this->table, array('license_status'=>'unknown','updated_at'=>current_time('mysql')), array('id'=>$id));
-                wp_safe_redirect(add_query_arg(array('page'=>'dietup','license_manual'=>'lookup_failed'), admin_url('admin.php')));
-                exit;
-            }
-            if (!empty($lookup['found'])) {
-                $license = array('id'=>$lookup['id'], 'key'=>$lookup['key']);
-            }
-        }
-
-        if (!$license) {
-            $row->license_status = 'issuing';
-            $license = DietUp_Integrations::spotplayer_license($row);
-        }
+        $row->license_status = 'issuing';
+        $license = DietUp_Integrations::spotplayer_license($row);
 
         if (is_wp_error($license)) {
             $state = ('dietup_spot_config' === $license->get_error_code()) ? 'failed' : 'unknown';
@@ -938,7 +922,7 @@ final class DietUp_Plugin {
                 'license_key'=>$license['key'],
                 'updated_at'=>current_time('mysql')
             ), array('id'=>$id));
-            $result = ('unknown' === $previous_status && isset($lookup) && !empty($lookup['found'])) ? 'recovered' : 'issued';
+            $result = 'issued';
         }
         wp_safe_redirect(add_query_arg(array('page'=>'dietup','license_manual'=>$result), admin_url('admin.php')));
         exit;
