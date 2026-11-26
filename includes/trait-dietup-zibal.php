@@ -59,7 +59,7 @@ trait DietUp_Zibal_Trait {
             $wpdb->query($wpdb->prepare(
                 "UPDATE {$this->table} SET payment_status = 'paid', payment_ref_id = %s, paid_at = %s, license_status = %s, updated_at = %s WHERE id = %d AND payment_status <> 'paid'",
                 sanitize_text_field((string)($verified['refNumber'] ?? $verified['refnumber'] ?? '')),
-                $initial_license_status, current_time('mysql'), current_time('mysql'), $row->id
+                current_time('mysql'), $initial_license_status, current_time('mysql'), $row->id
             ));
             $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $row->id));
         }
