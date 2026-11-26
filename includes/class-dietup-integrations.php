@@ -130,7 +130,9 @@ final class DietUp_Integrations {
         $allowed = array('online', 'certificate', 'complete');
         $s = get_option('dietup_integration_settings', array());
         $selected = isset($s['spotplayer_issue_packages']) && is_array($s['spotplayer_issue_packages']) ? $s['spotplayer_issue_packages'] : array();
-        return in_array((string)$package_key, $allowed, true) && in_array((string)$package_key, $selected, true);
+        // Backward compatibility: if older settings contain multiple values, only the first selected package is active.
+        $selected_package = $selected ? (string) reset($selected) : '';
+        return in_array((string)$package_key, $allowed, true) && in_array($selected_package, $allowed, true) && (string)$package_key === $selected_package;
     }
 
     /** Find an existing license by the exact registration payload before creating a replacement. */
@@ -220,6 +222,9 @@ final class DietUp_Integrations {
     public static function spotplayer_license($registration) {
         if (!is_object($registration) || empty($registration->id) || empty($registration->package_key)) {
             return new WP_Error('dietup_spot_registration', 'اطلاعات ثبت‌نام برای صدور لایسنس کامل نیست.');
+        }
+        if (!self::spotplayer_package_enabled($registration->package_key)) {
+            return new WP_Error('dietup_spot_package_disabled', 'این پکیج در تنظیمات برای صدور لایسنس SpotPlayer انتخاب نشده است.');
         }
         $s = get_option('dietup_integration_settings', array());
         $api = isset($s['spotplayer_api_key']) ? trim($s['spotplayer_api_key']) : '';
