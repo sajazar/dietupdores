@@ -342,12 +342,18 @@ final class DietUp_Plugin {
         $base_price = max(0, (int)$base_price);
         if ('' === $code) { return array('code' => '', 'percent' => 0, 'discount' => 0, 'final' => $base_price); }
         $settings = $this->get_settings();
-        $configured = strtoupper(trim((string)$settings['coupon_code']));
-        $percent = min(99, max(0, (int)$settings['coupon_percent']));
-        if ('' === $configured || 0 === $percent || !hash_equals($configured, $code)) { return new WP_Error('dietup_coupon_invalid', 'کد تخفیف واردشده معتبر یا فعال نیست.'); }
-        // Integer Toman arithmetic; floor prevents discount from exceeding the configured percentage.
-        $discount = (int) floor(($base_price * $percent) / 100);
-        return array('code' => $configured, 'percent' => $percent, 'discount' => min($base_price, $discount), 'final' => max(0, $base_price - $discount));
+        $configured_rows = isset($settings['coupon_codes']) && is_array($settings['coupon_codes']) ? $settings['coupon_codes'] : array();
+        // Backward compatibility: retain the previously configured single coupon if no new rows exist.
+        if (!$configured_rows && !empty($settings['coupon_code'])) { $configured_rows[] = array('code'=>$settings['coupon_code'],'percent'=>$settings['coupon_percent']); }
+        foreach ($configured_rows as $coupon) {
+            $configured = strtoupper(trim((string)($coupon['code'] ?? '')));
+            $percent = min(99, max(0, (int)($coupon['percent'] ?? 0)));
+            if ('' !== $configured && $percent > 0 && hash_equals($configured, $code)) {
+                $discount = (int) floor(($base_price * $percent) / 100);
+                return array('code'=>$configured,'percent'=>$percent,'discount'=>min($base_price,$discount),'final'=>max(0,$base_price-$discount));
+            }
+        }
+        return new WP_Error('dietup_coupon_invalid', 'کد تخفیف واردشده معتبر یا فعال نیست.');
     }
 
     public function ajax_validate_coupon() {
@@ -532,6 +538,7 @@ final class DietUp_Plugin {
             'melipayamak_test_mobile' => '',
             'coupon_code' => '',
             'coupon_percent' => 0,
+            'coupon_codes' => array(),
             'spotplayer_api_url' => '',
             'spotplayer_api_key' => '',
             'spotplayer_course_id' => '',
@@ -560,10 +567,14 @@ final class DietUp_Plugin {
             echo '<td><input type="number" min="0" step="1" name="packages['.esc_attr($key).'][old]" value="'.esc_attr($package['old']).'"></td>';
             echo '<td><textarea rows="4" class="large-text" name="packages['.esc_attr($key).'][features]">'.esc_textarea(implode("\n",$package['features'])).'</textarea></td></tr>';
         }
-        echo '</tbody></table><h2>کد تخفیف</h2><p>در هر زمان یک کد تخفیف فعال تعریف می‌شود. برای غیرفعال‌کردن آن، کد را خالی یا درصد را صفر کنید. تخفیف به‌صورت درصدی از قیمت پکیج انتخابی محاسبه می‌شود.</p><table class="form-table"><tbody>';
-        echo '<tr><th><label for="dietup_coupon_code">کد تخفیف</label></th><td><input class="regular-text" id="dietup_coupon_code" name="coupon_code" value="'.esc_attr($s['coupon_code']).'" maxlength="80" autocomplete="off" placeholder="مثلاً DIETUP20"></td></tr>';
-        echo '<tr><th><label for="dietup_coupon_percent">درصد تخفیف</label></th><td><input type="number" id="dietup_coupon_percent" name="coupon_percent" min="0" max="99" step="1" value="'.esc_attr((int)$s['coupon_percent']).'"> درصد <p class="description">عدد صحیح بین ۱ تا ۹۹؛ برای جلوگیری از ایجاد سفارش با مبلغ صفر، تخفیف ۱۰۰ درصدی پذیرفته نمی‌شود.</p></td></tr>';
-        echo '</tbody></table><h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
+        echo '</tbody></table><h2>کدهای تخفیف</h2><p>حداکثر پنج کد تخفیف فعال با درصد مستقل تعریف کنید. برای غیرفعال‌کردن هر کد، کد یا درصد آن را خالی/صفر بگذارید.</p><table class="widefat striped" style="max-width:900px;margin:12px 0 24px"><thead><tr><th>ردیف</th><th>کد تخفیف</th><th>درصد تخفیف</th></tr></thead><tbody>';
+        $coupon_rows = isset($s['coupon_codes']) && is_array($s['coupon_codes']) ? $s['coupon_codes'] : array();
+        if (!$coupon_rows && !empty($s['coupon_code'])) { $coupon_rows[] = array('code'=>$s['coupon_code'],'percent'=>(int)$s['coupon_percent']); }
+        for ($coupon_i = 0; $coupon_i < 5; $coupon_i++) {
+            $coupon = isset($coupon_rows[$coupon_i]) && is_array($coupon_rows[$coupon_i]) ? $coupon_rows[$coupon_i] : array('code'=>'','percent'=>0);
+            echo '<tr><td>'.($coupon_i + 1).'</td><td><input class="regular-text" name="coupon_codes['.$coupon_i.'][code]" value="'.esc_attr($coupon['code'] ?? '').'" maxlength="80" autocomplete="off" placeholder="مثلاً DIETUP20"></td><td><input type="number" name="coupon_codes['.$coupon_i.'][percent]" min="0" max="99" step="1" value="'.esc_attr((int)($coupon['percent'] ?? 0)).'"> درصد</td></tr>';
+        }
+        echo '</tbody></table><p class="description">درصد هر کد جداگانه است؛ مقدار باید بین ۱ تا ۹۹ باشد. کدهای تکراری ذخیره نمی‌شوند.</p><h2>درگاه زیبال</h2><p>اتصال زیبال با شناسه پذیرنده انجام می‌شود؛ نشانی‌های API رسمی در کد افزونه ثابت هستند و نیازی به API Key جداگانه نیست.</p><table class="form-table"><tbody>';
         echo '<tr><th><label for="dietup_gateway_merchant_id">Merchant ID / شناسه پذیرنده</label></th><td><input class="regular-text" id="dietup_gateway_merchant_id" name="gateway_merchant_id" value="'.esc_attr($s['gateway_merchant_id']).'"></td></tr>';
         echo '<tr><th>پرداخت آزمایشی</th><td><label><input type="checkbox" name="gateway_test_mode" value="1" '.checked(!empty($s['gateway_test_mode']), true, false).'> فعال‌سازی ثبت پرداخت موفق بدون اتصال به زیبال</label><p class="description"><strong>هشدار:</strong> در این حالت فقط مدیران سایت پرداخت شبیه‌سازی‌شده خواهند داشت؛ سایر کاربران همچنان به درگاه واقعی زیبال هدایت می‌شوند. بااین‌حال برای ثبت‌نام آزمایشی، درخواست صدور لایسنس واقعی به SpotPlayer ارسال می‌شود و ممکن است در حساب SpotPlayer شما لایسنس ثبت شود. پس از پایان تست، این گزینه را خاموش کنید.</p></td></tr>';
         echo '<tr><th><label for="dietup_telegram_url">لینک تلگرام دوره</label></th><td><input class="regular-text" type="url" id="dietup_telegram_url" name="telegram_url" value="' . esc_attr($s['telegram_url']) . '" placeholder="https://t.me/..."><p class="description">این لینک در پنل ثبت‌نام‌کنندگان پرداخت‌شده نمایش داده می‌شود.</p></td></tr>';
@@ -595,10 +606,22 @@ final class DietUp_Plugin {
         $old = $this->get_settings();
         $text_fields = array('gateway_name','gateway_merchant_id','spotplayer_course_id');
         $new = $old;
-        $new['coupon_code'] = isset($_POST['coupon_code']) ? strtoupper(trim(sanitize_text_field(wp_unslash($_POST['coupon_code'])))) : '';
-        $new['coupon_code'] = preg_replace('/[^A-Z0-9_-]/', '', $new['coupon_code']);
-        $new['coupon_percent'] = isset($_POST['coupon_percent']) ? min(99, absint($_POST['coupon_percent'])) : 0;
-        if ('' === $new['coupon_code'] || 0 === (int)$new['coupon_percent']) { $new['coupon_code'] = ''; $new['coupon_percent'] = 0; }
+        $coupon_input = isset($_POST['coupon_codes']) && is_array($_POST['coupon_codes']) ? wp_unslash($_POST['coupon_codes']) : array();
+        $clean_coupons = array();
+        $seen_coupons = array();
+        for ($coupon_i = 0; $coupon_i < 5; $coupon_i++) {
+            $item = isset($coupon_input[$coupon_i]) && is_array($coupon_input[$coupon_i]) ? $coupon_input[$coupon_i] : array();
+            $code = strtoupper(trim(sanitize_text_field($item['code'] ?? '')));
+            $code = preg_replace('/[^A-Z0-9_-]/', '', $code);
+            $percent = min(99, absint($item['percent'] ?? 0));
+            if ('' === $code || 0 === $percent || isset($seen_coupons[$code])) { continue; }
+            $seen_coupons[$code] = true;
+            $clean_coupons[] = array('code'=>$code,'percent'=>$percent);
+        }
+        $new['coupon_codes'] = $clean_coupons;
+        // Preserve the legacy keys for older code/extensions reading the previous single-coupon setting.
+        $new['coupon_code'] = $clean_coupons[0]['code'] ?? '';
+        $new['coupon_percent'] = $clean_coupons[0]['percent'] ?? 0;
         foreach ($text_fields as $field) {
             $new[$field] = isset($_POST[$field]) ? sanitize_text_field(wp_unslash($_POST[$field])) : '';
         }
