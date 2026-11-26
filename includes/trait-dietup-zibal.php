@@ -67,7 +67,7 @@ trait DietUp_Zibal_Trait {
             $this->send_paid_registration_sms($row->id);
         }
 
-        if ('paid' === $row->payment_status && 'pending' === $row->license_status) {
+        if ('paid' === $row->payment_status && 'pending' === $row->license_status && DietUp_Integrations::spotplayer_package_enabled($row->package_key)) {
             // Prevent concurrent callbacks from issuing duplicate licenses.
             $claimed = $wpdb->query($wpdb->prepare(
                 "UPDATE {$this->table} SET license_status = 'issuing', updated_at = %s WHERE id = %d AND license_status = 'pending'",
