@@ -750,6 +750,7 @@ final class DietUp_Plugin {
         global $wpdb;
         $status = isset($_GET['payment_status']) ? sanitize_key(wp_unslash($_GET['payment_status'])) : '';
         $package = isset($_GET['package_key']) ? sanitize_key(wp_unslash($_GET['package_key'])) : '';
+        $license_filter = isset($_GET['license_filter']) ? sanitize_key(wp_unslash($_GET['license_filter'])) : '';
         $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
         $paged = max(1, absint($_GET['paged'] ?? 1));
         $per_page = 20;
@@ -757,6 +758,18 @@ final class DietUp_Plugin {
         $args = array();
         if ($status && in_array($status, array('pending','paid','failed','refunded'), true)) { $where[] = 'payment_status = %s'; $args[] = $status; }
         if ($package && isset($this->packages()[$package])) { $where[] = 'package_key = %s'; $args[] = $package; }
+        if ('not_issued' === $license_filter) {
+            $integration_settings = get_option('dietup_integration_settings', array());
+            $license_packages = isset($integration_settings['spotplayer_issue_packages']) && is_array($integration_settings['spotplayer_issue_packages']) ? array_values(array_intersect(array('online', 'certificate', 'complete'), $integration_settings['spotplayer_issue_packages'])) : array();
+            if ($license_packages) {
+                $where[] = "payment_status = 'paid'";
+                $where[] = 'package_key IN (' . implode(',', array_fill(0, count($license_packages), '%s')) . ')';
+                $args = array_merge($args, $license_packages);
+                $where[] = "(license_status <> 'issued' OR license_id IS NULL OR license_id = '' OR license_key IS NULL OR license_key = '')";
+            } else {
+                $where[] = '1=0';
+            }
+        }
         if ($search) {
             $like = '%' . $wpdb->esc_like($search) . '%';
             $where[] = '(full_name LIKE %s OR mobile LIKE %s OR email LIKE %s)';
@@ -806,7 +819,7 @@ final class DietUp_Plugin {
         echo '<div class="notice notice-warning"><p>حذف کامل، اطلاعات ثبت‌نام دایت‌آپ، مدارک بارگذاری‌شده، گواهی و تاریخچه بررسی را پاک می‌کند؛ حساب کاربری وردپرس و لایسنس ثبت‌شده در پنل SpotPlayer به‌صورت خودکار حذف یا باطل نمی‌شوند.</p></div>';
         echo '<div class="notice notice-info"><p>ثبت‌نام‌ها: <strong>'.esc_html(number_format_i18n((int)$stats->total)).'</strong> | پرداخت موفق: <strong>'.esc_html(number_format_i18n((int)$stats->paid_count)).'</strong> | فروش تأییدشده: <strong>'.esc_html(number_format_i18n((int)$stats->revenue)).' تومان</strong></p></div>';
         if ($total_pages > 1) {
-            $pagination_base_url = add_query_arg(array('page'=>'dietup','s'=>$search,'payment_status'=>$status,'package_key'=>$package,'paged'=>'%#%'), admin_url('admin.php'));
+            $pagination_base_url = add_query_arg(array('page'=>'dietup','s'=>$search,'payment_status'=>$status,'package_key'=>$package,'license_filter'=>$license_filter,'paged'=>'%#%'), admin_url('admin.php'));
             echo '<nav class="dietup-pagination" aria-label="صفحه‌بندی ثبت‌نام‌ها">'.wp_kses_post(paginate_links(array('base'=>$pagination_base_url,'format'=>'','current'=>$paged,'total'=>$total_pages,'prev_text'=>'« قبلی','next_text'=>'بعدی »','type'=>'plain'))).'</nav>';
         }
         echo '<form method="get" style="display:flex;gap:8px;align-items:center;margin:14px 0"><input type="hidden" name="page" value="dietup"><input type="search" name="s" value="'.esc_attr($search).'" placeholder="نام، موبایل یا ایمیل">';
@@ -814,7 +827,7 @@ final class DietUp_Plugin {
         foreach (array('pending'=>'در انتظار پرداخت','paid'=>'پرداخت موفق','failed'=>'ناموفق','refunded'=>'مستردشده') as $k=>$v) { echo '<option value="'.esc_attr($k).'" '.selected($status,$k,false).'>'.esc_html($v).'</option>'; }
         echo '</select><select name="package_key"><option value="">همه پکیج‌ها</option>';
         foreach ($this->packages() as $k=>$v) { echo '<option value="'.esc_attr($k).'" '.selected($package,$k,false).'>'.esc_html($v['title']).'</option>'; }
-        echo '</select><input type="hidden" name="paged" value="1"><button class="button">فیلتر</button></form>';
+        echo '</select><select name="license_filter"><option value="">همه وضعیت‌های لایسنس</option><option value="not_issued" '.selected($license_filter,'not_issued',false).'>خریداران پکیج دارای لایسنس که لایسنس دریافت نکرده‌اند</option></select><input type="hidden" name="paged" value="1"><button class="button">فیلتر</button></form>';
         echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_export_csv">';
         wp_nonce_field('dietup_export_csv','dietup_export_nonce');
         echo '<input type="hidden" name="payment_status" value="'.esc_attr($status).'"><input type="hidden" name="package_key" value="'.esc_attr($package).'"><input type="hidden" name="s" value="'.esc_attr($search).'">';
