@@ -246,11 +246,22 @@ final class DietUp_Integrations {
             ),
             'body' => wp_json_encode($body),
         ));
-        if (is_wp_error($response)) { return $response; }
-        $json = json_decode(wp_remote_retrieve_body($response), true);
-        if (!is_array($json) || empty($json['_id']) || empty($json['key'])) {
-            $message = isset($json['ex']['msg']) ? $json['ex']['msg'] : 'پاسخ صدور لایسنس معتبر نیست.';
-            return new WP_Error('dietup_spot_license', sanitize_text_field($message));
+        if (is_wp_error($response)) {
+            return new WP_Error('dietup_spot_transport', 'ارتباط با SpotPlayer برقرار نشد: ' . sanitize_text_field($response->get_error_message()));
+        }
+        $http_status = (int) wp_remote_retrieve_response_code($response);
+        $response_body = (string) wp_remote_retrieve_body($response);
+        $json = json_decode($response_body, true);
+        if (!is_array($json)) {
+            $detail = substr(trim(wp_strip_all_tags($response_body)), 0, 400);
+            return new WP_Error('dietup_spot_response', 'پاسخ SpotPlayer معتبر نیست (HTTP ' . $http_status . '). ' . ($detail ? sanitize_text_field($detail) : 'بدنه پاسخ خالی یا غیر JSON است.'));
+        }
+        if ($http_status < 200 || $http_status >= 300 || isset($json['ex'])) {
+            $message = isset($json['ex']['msg']) ? (string) $json['ex']['msg'] : (isset($json['message']) ? (string) $json['message'] : 'درخواست صدور توسط SpotPlayer پذیرفته نشد.');
+            return new WP_Error('dietup_spot_rejected', 'SpotPlayer (HTTP ' . $http_status . '): ' . sanitize_text_field($message));
+        }
+        if (empty($json['_id']) || empty($json['key'])) {
+            return new WP_Error('dietup_spot_incomplete', 'SpotPlayer پاسخ موفق برنگرداند؛ شناسه یا کلید لایسنس در پاسخ وجود ندارد.');
         }
         return array('id' => sanitize_text_field($json['_id']), 'key' => sanitize_text_field($json['key']));
     }
