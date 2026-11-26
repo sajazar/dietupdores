@@ -751,6 +751,7 @@ final class DietUp_Plugin {
         $status = isset($_GET['payment_status']) ? sanitize_key(wp_unslash($_GET['payment_status'])) : '';
         $package = isset($_GET['package_key']) ? sanitize_key(wp_unslash($_GET['package_key'])) : '';
         $license_filter = isset($_GET['license_filter']) ? sanitize_key(wp_unslash($_GET['license_filter'])) : '';
+        if ('not_issued' === $license_filter) { $status = 'paid'; }
         $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
         $paged = max(1, absint($_GET['paged'] ?? 1));
         $per_page = 20;
