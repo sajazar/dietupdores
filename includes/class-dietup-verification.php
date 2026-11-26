@@ -54,6 +54,7 @@ final class DietUp_Verification {
 
     public static function init() {
         add_action('admin_post_dietup_admin_view_file', array(__CLASS__, 'admin_view_file'));
+        add_action('admin_post_dietup_download_documents_zip', array(__CLASS__, 'download_documents_zip'));
         add_action('admin_post_dietup_review_documents', array(__CLASS__, 'review_documents'));
         add_action('admin_post_dietup_save_specialties', array(__CLASS__, 'save_specialties'));
         add_action('admin_post_dietup_upload_certificate', array(__CLASS__, 'upload_certificate'));
@@ -249,7 +250,13 @@ final class DietUp_Verification {
         global $wpdb;
         $registrations = $wpdb->prefix . 'dietup_registrations';
         $docs = self::documents_table();
-        $rows = $wpdb->get_results("SELECT * FROM {$registrations} ORDER BY id DESC LIMIT 200");
+        $paged = max(1, absint($_GET['paged'] ?? 1));
+        $per_page = 20;
+        $total_rows = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$registrations}");
+        $total_pages = max(1, (int)ceil($total_rows / $per_page));
+        $paged = min($paged, $total_pages);
+        $offset = ($paged - 1) * $per_page;
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$registrations} ORDER BY id DESC LIMIT %d OFFSET %d", $per_page, $offset));
         echo '<div class="wrap dietup-verification-admin"><style>
         .dietup-verification-admin .postbox{border:1px solid #dce7ef;border-radius:16px;box-shadow:0 8px 24px rgba(20,45,65,.06);padding:18px!important}
         .dietup-verification-admin .postbox h2{color:#173e5a}
@@ -257,7 +264,9 @@ final class DietUp_Verification {
         .dietup-verification-admin input[type=file]{padding:10px;border:1px dashed #a9c4d1;border-radius:10px;background:#f8fbfd;max-width:100%}
         .dietup-verification-admin .button-primary{background:linear-gradient(110deg,#145b83,#168b91);border:0;border-radius:9px;padding:5px 14px}
         .dietup-verification-admin .dietup-certificate-delete-button{color:#a33b35;border-color:#edcfcd;background:#fff8f7}
-        </style><h1>مدارک تخصصی و گواهی کاربران</h1><p>حداکثر ۲۰۰ ثبت‌نام آخر نمایش داده می‌شود. فایل‌ها خصوصی هستند و فقط مدیر مجاز به مشاهده آن‌هاست.</p>';
+        </style><h1>مدارک تخصصی و گواهی کاربران</h1><p>در هر صفحه ۲۰ ثبت‌نام نمایش داده می‌شود. فایل‌ها خصوصی هستند و فقط مدیر مجاز به مشاهده آن‌هاست.</p>';
+        echo '<p><a class="button button-primary" href="'.esc_url(wp_nonce_url(admin_url('admin-post.php?action=dietup_download_documents_zip'), 'dietup_download_documents_zip')).'">دانلود ZIP مدارک کاربران</a></p>';
+        echo '<p>نمایش '.esc_html(number_format_i18n($total_rows ? $offset + 1 : 0)).' تا '.esc_html(number_format_i18n(min($offset + $per_page, $total_rows))).' از '.esc_html(number_format_i18n($total_rows)).' ثبت‌نام</p>';
         if (isset($_GET['specialties_saved'])) { echo '<div class="notice notice-success"><p>فهرست تخصص‌ها ذخیره شد.</p></div>'; }
         echo '<details class="postbox" style="padding:12px;margin:12px 0"><summary><strong>مدیریت فهرست تخصص‌های پزشکی</strong></summary><form method="post" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="dietup_save_specialties">';
         wp_nonce_field('dietup_save_specialties', 'dietup_specialties_nonce');
@@ -312,6 +321,10 @@ final class DietUp_Verification {
                 echo '<p>این پکیج شامل گواهی اختصاصی نیست.</p>';
             }
             echo '</div>';
+        }
+        if ($total_pages > 1) {
+            $base_url = add_query_arg(array('page'=>'dietup-verification','paged'=>'%#%'), admin_url('admin.php'));
+            echo '<div class="tablenav"><div class="tablenav-pages">'.wp_kses_post(paginate_links(array('base'=>$base_url,'format'=>'','current'=>$paged,'total'=>$total_pages,'prev_text'=>'« قبلی','next_text'=>'بعدی »','type'=>'plain'))).'</div></div>';
         }
         echo '</div>';
     }
@@ -410,6 +423,41 @@ final class DietUp_Verification {
         wp_safe_redirect(wc_get_account_endpoint_url('dietup-courses')); exit;
     }
 
+
+
+    public static function download_documents_zip() {
+        if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
+        if (!wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'] ?? '')), 'dietup_download_documents_zip')) { wp_die('درخواست نامعتبر است.'); }
+        if (!class_exists('ZipArchive')) { wp_die('برای ساخت فایل ZIP، افزونه PHP ZipArchive باید روی هاست فعال باشد.'); }
+        global $wpdb;
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT d.*, r.full_name, r.id AS registration_number FROM ".self::documents_table()." d INNER JOIN {$wpdb->prefix}dietup_registrations r ON r.id=d.registration_id WHERE d.document_type=%s ORDER BY r.id DESC, d.id ASC", 'qualification'));
+        if (!$rows) { wp_die('هنوز مدرک بارگذاری‌شده‌ای برای دانلود وجود ندارد.'); }
+        $base = realpath(self::storage_dir());
+        if (!$base) { wp_die('پوشه خصوصی مدارک پیدا نشد.'); }
+        $tmp = tempnam(sys_get_temp_dir(), 'dietup-docs-zip-');
+        if (!$tmp) { wp_die('ساخت فایل موقت ZIP ناموفق بود.'); }
+        $zip = new ZipArchive();
+        if (true !== $zip->open($tmp, ZipArchive::OVERWRITE)) { @unlink($tmp); wp_die('ساخت فایل ZIP ناموفق بود.'); }
+        $added = 0;
+        foreach ($rows as $row) {
+            $path = realpath($row->storage_path);
+            if (!$path || 0 !== strpos($path, trailingslashit($base)) || !is_file($path) || !is_readable($path)) { continue; }
+            $folder = sanitize_file_name('ثبت نام '.$row->registration_number.' - '.$row->full_name);
+            $filename = sanitize_file_name($row->original_filename);
+            if ('' === $filename) { $filename = 'document-'.$row->id; }
+            $entry = $folder.'/'.$filename;
+            if ($zip->addFile($path, $entry)) { $added++; }
+        }
+        $zip->close();
+        if (!$added) { @unlink($tmp); wp_die('هیچ فایل مدرک سالمی برای افزودن به ZIP پیدا نشد.'); }
+        nocache_headers();
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="dietup-user-documents-'.gmdate('Y-m-d').'.zip"');
+        header('Content-Length: '.(string)filesize($tmp));
+        readfile($tmp);
+        @unlink($tmp);
+        exit;
+    }
     public static function admin_view_file() {
         if (!current_user_can('manage_options')) { wp_die('دسترسی غیرمجاز'); }
         $id = absint($_GET['document_id'] ?? 0);
