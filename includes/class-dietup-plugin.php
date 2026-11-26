@@ -810,7 +810,19 @@ final class DietUp_Plugin {
         @media(max-width:782px){.dietup-admin-wrap .widefat{display:block;overflow-x:auto;white-space:nowrap}}
         </style><h1>مدیریت ثبت‌نام دوره دایت‌آپ</h1>';
         if (isset($_GET['deleted']) && '1' === (string)$_GET['deleted']) { echo '<div class="notice notice-success is-dismissible"><p>اطلاعات ثبت‌نام و فایل‌های خصوصی مرتبط از دایت‌آپ حذف شدند.</p></div>'; }
-        if (isset($_GET['license_manual'])) { $license_manual_status = sanitize_key(wp_unslash($_GET['license_manual'])); $license_notice = 'issued' === $license_manual_status ? 'درخواست صدور لایسنس به SpotPlayer ارسال شد و لایسنس با موفقیت در پنل کاربر ذخیره شد.' : 'صدور لایسنس با خطا مواجه شد؛ وضعیت ثبت‌نام را بررسی کنید.'; $license_notice_type = 'issued' === $license_manual_status ? 'success' : 'error'; echo '<div class="notice notice-'.esc_attr($license_notice_type).' is-dismissible"><p>'.esc_html($license_notice).'</p></div>'; }
+        if (isset($_GET['license_manual'])) {
+            $license_manual_status = sanitize_key(wp_unslash($_GET['license_manual']));
+            $license_notice = 'issued' === $license_manual_status ? 'درخواست صدور لایسنس به SpotPlayer ارسال شد و لایسنس با موفقیت در پنل کاربر ذخیره شد.' : 'صدور لایسنس ناموفق بود.';
+            $license_notice_type = 'issued' === $license_manual_status ? 'success' : 'error';
+            if ('failed' === $license_manual_status) {
+                $license_diag = get_transient('dietup_spot_manual_diag_' . get_current_user_id());
+                if (is_string($license_diag) && '' !== $license_diag) {
+                    $license_notice .= ' جزئیات فنی: ' . $license_diag;
+                    delete_transient('dietup_spot_manual_diag_' . get_current_user_id());
+                }
+            }
+            echo '<div class="notice notice-'.esc_attr($license_notice_type).' is-dismissible"><p>'.esc_html($license_notice).'</p></div>';
+        }
         if (isset($_GET['sms_manual'])) {
             $sms_notice = sanitize_key(wp_unslash($_GET['sms_manual']));
             $sms_messages = array(
@@ -921,6 +933,8 @@ final class DietUp_Plugin {
         if (is_wp_error($license)) {
             $state = ('dietup_spot_config' === $license->get_error_code()) ? 'failed' : 'unknown';
             $wpdb->update($this->table, array('license_status'=>$state,'updated_at'=>current_time('mysql')), array('id'=>$id));
+            $diagnostic = $license->get_error_code() . ': ' . $license->get_error_message();
+            set_transient('dietup_spot_manual_diag_' . get_current_user_id(), sanitize_text_field($diagnostic), 15 * MINUTE_IN_SECONDS);
             $result = 'failed';
         } else {
             $wpdb->update($this->table, array(
