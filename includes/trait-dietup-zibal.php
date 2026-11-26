@@ -55,10 +55,11 @@ trait DietUp_Zibal_Trait {
             if ((int)($verified['amount'] ?? 0) !== ((int)$row->package_price * 10)) {
                 wp_die('مبلغ تأییدشده با مبلغ سفارش مطابقت ندارد. برای بررسی با پشتیبانی تماس بگیرید.');
             }
+            $initial_license_status = DietUp_Integrations::spotplayer_package_enabled($row->package_key) ? 'pending' : 'not_issued';
             $wpdb->query($wpdb->prepare(
-                "UPDATE {$this->table} SET payment_status = 'paid', payment_ref_id = %s, paid_at = %s, license_status = 'pending', updated_at = %s WHERE id = %d AND payment_status <> 'paid'",
+                "UPDATE {$this->table} SET payment_status = 'paid', payment_ref_id = %s, paid_at = %s, license_status = %s, updated_at = %s WHERE id = %d AND payment_status <> 'paid'",
                 sanitize_text_field((string)($verified['refNumber'] ?? $verified['refnumber'] ?? '')),
-                current_time('mysql'), current_time('mysql'), $row->id
+                $initial_license_status, current_time('mysql'), current_time('mysql'), $row->id
             ));
             $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $row->id));
         }
