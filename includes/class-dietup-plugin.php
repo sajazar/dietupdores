@@ -781,6 +781,11 @@ final class DietUp_Plugin {
         .dietup-admin-wrap .dietup-delete-registration{border-color:#e8b8b5;color:#a52f2a;background:#fff7f6}
         .dietup-admin-wrap .dietup-delete-registration:hover{background:#a52f2a;color:#fff;border-color:#a52f2a}
         .dietup-admin-wrap .notice-info{border:0;border-right:4px solid #2b7ba8;border-radius:10px;padding:12px 16px}
+        .dietup-admin-wrap .dietup-pagination{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:7px;margin:18px 0 16px;padding:12px 14px;background:#f6fafc;border:1px solid #e1ebf1;border-radius:14px}
+        .dietup-admin-wrap .dietup-pagination .page-numbers{display:inline-flex;align-items:center;justify-content:center;min-width:36px;height:36px;padding:0 11px;border:1px solid #d8e5ec;border-radius:9px;background:#fff;color:#245675;text-decoration:none;font-weight:600;box-sizing:border-box}
+        .dietup-admin-wrap .dietup-pagination .page-numbers.current{background:linear-gradient(110deg,#145b83,#168b91);border-color:transparent;color:#fff;box-shadow:0 4px 10px rgba(20,103,132,.16)}
+        .dietup-admin-wrap .dietup-pagination .page-numbers:hover:not(.current){background:#eaf4f8;border-color:#a9c9d7}
+        .dietup-admin-wrap .dietup-pagination .page-numbers.dots{border-color:transparent;background:transparent}
         @media(max-width:782px){.dietup-admin-wrap .widefat{display:block;overflow-x:auto;white-space:nowrap}}
         </style><h1>مدیریت ثبت‌نام دوره دایت‌آپ</h1>';
         if (isset($_GET['deleted']) && '1' === (string)$_GET['deleted']) { echo '<div class="notice notice-success is-dismissible"><p>اطلاعات ثبت‌نام و فایل‌های خصوصی مرتبط از دایت‌آپ حذف شدند.</p></div>'; }
@@ -800,6 +805,10 @@ final class DietUp_Plugin {
         }
         echo '<div class="notice notice-warning"><p>حذف کامل، اطلاعات ثبت‌نام دایت‌آپ، مدارک بارگذاری‌شده، گواهی و تاریخچه بررسی را پاک می‌کند؛ حساب کاربری وردپرس و لایسنس ثبت‌شده در پنل SpotPlayer به‌صورت خودکار حذف یا باطل نمی‌شوند.</p></div>';
         echo '<div class="notice notice-info"><p>ثبت‌نام‌ها: <strong>'.esc_html(number_format_i18n((int)$stats->total)).'</strong> | پرداخت موفق: <strong>'.esc_html(number_format_i18n((int)$stats->paid_count)).'</strong> | فروش تأییدشده: <strong>'.esc_html(number_format_i18n((int)$stats->revenue)).' تومان</strong></p></div>';
+        if ($total_pages > 1) {
+            $pagination_base_url = add_query_arg(array('page'=>'dietup','s'=>$search,'payment_status'=>$status,'package_key'=>$package,'paged'=>'%#%'), admin_url('admin.php'));
+            echo '<nav class="dietup-pagination" aria-label="صفحه‌بندی ثبت‌نام‌ها">'.wp_kses_post(paginate_links(array('base'=>$pagination_base_url,'format'=>'','current'=>$paged,'total'=>$total_pages,'prev_text'=>'« قبلی','next_text'=>'بعدی »','type'=>'plain'))).'</nav>';
+        }
         echo '<form method="get" style="display:flex;gap:8px;align-items:center;margin:14px 0"><input type="hidden" name="page" value="dietup"><input type="search" name="s" value="'.esc_attr($search).'" placeholder="نام، موبایل یا ایمیل">';
         echo '<select name="payment_status"><option value="">همه وضعیت‌های پرداخت</option>';
         foreach (array('pending'=>'در انتظار پرداخت','paid'=>'پرداخت موفق','failed'=>'ناموفق','refunded'=>'مستردشده') as $k=>$v) { echo '<option value="'.esc_attr($k).'" '.selected($status,$k,false).'>'.esc_html($v).'</option>'; }
@@ -838,10 +847,6 @@ final class DietUp_Plugin {
             echo '<button type="submit" class="button button-small dietup-delete-registration">حذف کامل</button></form></td></tr>';
         }} else { echo '<tr><td colspan="15">رکوردی مطابق فیلترها پیدا نشد.</td></tr>'; }
         echo '</tbody></table>';
-        if ($total_pages > 1) {
-            $base_url = add_query_arg(array('page'=>'dietup','s'=>$search,'payment_status'=>$status,'package_key'=>$package,'paged'=>'%#%'), admin_url('admin.php'));
-            echo '<div class="tablenav"><div class="tablenav-pages">'.wp_kses_post(paginate_links(array('base'=> $base_url,'format'=>'','current'=>$paged,'total'=>$total_pages,'prev_text'=>'« قبلی','next_text'=>'بعدی »','type'=>'plain'))).'</div></div>';
-        }
         echo '</div>';
     }
 
