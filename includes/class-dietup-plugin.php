@@ -784,6 +784,7 @@ final class DietUp_Plugin {
         @media(max-width:782px){.dietup-admin-wrap .widefat{display:block;overflow-x:auto;white-space:nowrap}}
         </style><h1>مدیریت ثبت‌نام دوره دایت‌آپ</h1>';
         if (isset($_GET['deleted']) && '1' === (string)$_GET['deleted']) { echo '<div class="notice notice-success is-dismissible"><p>اطلاعات ثبت‌نام و فایل‌های خصوصی مرتبط از دایت‌آپ حذف شدند.</p></div>'; }
+        if (isset($_GET['license_manual'])) { $license_manual_status = sanitize_key(wp_unslash($_GET['license_manual'])); $license_notice = 'issued' === $license_manual_status ? 'لایسنس SpotPlayer با موفقیت صادر شد.' : 'صدور لایسنس با خطا مواجه شد؛ وضعیت ثبت‌نام را بررسی کنید.'; echo '<div class="notice notice-'.('issued' === $license_manual_status ? 'success' : 'error').' is-dismissible"><p>'.esc_html($license_notice).'</p></div>'; }
         if (isset($_GET['sms_manual'])) {
             $sms_notice = sanitize_key(wp_unslash($_GET['sms_manual']));
             $sms_messages = array(
@@ -818,7 +819,7 @@ final class DietUp_Plugin {
         if ($rows) { foreach ($rows as $r) {
             echo '<tr><td>'.esc_html($r->id).'</td><td><strong>'.esc_html($r->full_name).'</strong></td><td>'.esc_html($r->mobile).'</td><td>'.esc_html($r->email).'</td><td>'.esc_html($r->university).'</td><td>'.esc_html($r->profession).'</td><td>'.esc_html($r->specialty).'</td><td>'.esc_html($r->workplace . ($r->workplace_other ? ' - '.$r->workplace_other : '')).'</td><td>'.esc_html($this->packages()[$r->package_key]['title'] ?? $r->package_key).'</td><td>'.(!empty($r->discount_amount) ? '<small>قیمت اولیه: '.esc_html(number_format_i18n((int)$r->base_package_price)).' تومان<br>تخفیف: '.esc_html(number_format_i18n((int)$r->discount_amount)).' تومان ('.esc_html((int)$r->discount_percent).'٪) | '.esc_html($r->discount_code).'<br></small>' : '').'<strong>'.esc_html(number_format_i18n($r->package_price)).' تومان</strong></td><td><span class="dietup-admin-status">'.esc_html(('test' === $r->payment_gateway && 'paid' === $r->payment_status) ? 'موفق (آزمایشی)' : $this->payment_label($r->payment_status)).'</span></td><td><span class="dietup-admin-status">'.esc_html($this->license_label($r->license_status)).'</span>';
             if ('paid' === $r->payment_status && DietUp_Integrations::spotplayer_package_enabled($r->package_key) && in_array($r->license_status, array('not_issued','failed'), true) && empty($r->license_id) && empty($r->license_key)) {
-                echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return confirm(\\'برای این ثبت‌نام درخواست صدور لایسنس SpotPlayer ارسال شود؟\\')"><input type="hidden" name="action" value="dietup_manual_issue_license"><input type="hidden" name="registration_id" value="' . esc_attr($r->id) . '">';
+                echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return confirm(\'برای این ثبت‌نام درخواست صدور لایسنس SpotPlayer ارسال شود؟\')"><input type="hidden" name="action" value="dietup_manual_issue_license"><input type="hidden" name="registration_id" value="' . esc_attr($r->id) . '">';
                 wp_nonce_field('dietup_manual_issue_license_' . $r->id, 'dietup_manual_issue_license_nonce');
                 echo '<button class="button button-small button-primary">صدور دستی لایسنس</button></form>';
             }
