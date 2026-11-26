@@ -133,6 +133,90 @@ final class DietUp_Integrations {
         return in_array((string)$package_key, $allowed, true) && in_array((string)$package_key, $selected, true);
     }
 
+    /** Find an existing license by the exact registration payload before creating a replacement. */
+    public static function spotplayer_find_license_by_payload($payload) {
+        $s = get_option('dietup_integration_settings', array());
+        $api = isset($s['spotplayer_api_key']) ? trim($s['spotplayer_api_key']) : '';
+        if (!$api || '' === (string)$payload) {
+            return new WP_Error('dietup_spot_lookup_config', 'کلید API یا شناسه جستجوی لایسنس ناقص است.');
+        }
+
+        $headers = array('$API' => $api, '$LEVEL' => '-1', 'Accept' => 'application/json');
+        for ($page = 0; $page < 100; $page++) {
+            $response = wp_remote_get('https://panel.spotplayer.ir/license/?p=' . $page, array(
+                'timeout' => 30,
+                'headers' => $headers,
+            ));
+            if (is_wp_error($response)) { return $response; }
+            $status = (int) wp_remote_retrieve_response_code($response);
+            $json = json_decode(wp_remote_retrieve_body($response), true);
+            if ($status < 200 || $status >= 300 || !is_array($json) || isset($json['ex'])) {
+                $message = isset($json['ex']['msg']) ? $json['ex']['msg'] : 'پاسخ فهرست لایسنس‌های SpotPlayer معتبر نیست.';
+                return new WP_Error('dietup_spot_lookup', sanitize_text_field($message));
+            }
+
+            $rows = array();
+            self::spotplayer_collect_license_rows($json, $rows);
+            if (!$rows) { return array('found' => false); }
+
+            foreach ($rows as $license_row) {
+                $row_payload = $license_row['payload'] ?? ($license_row['data']['payload'] ?? '');
+                if (!is_scalar($row_payload) || !hash_equals((string)$payload, (string)$row_payload)) { continue; }
+
+                $license_id = isset($license_row['_id']) ? sanitize_text_field((string)$license_row['_id']) : '';
+                if ('' === $license_id) {
+                    return new WP_Error('dietup_spot_lookup_id', 'لایسنس منطبق پیدا شد اما شناسه آن در پاسخ SpotPlayer موجود نیست.');
+                }
+
+                $detail_response = wp_remote_get('https://panel.spotplayer.ir/license/edit/' . rawurlencode($license_id), array(
+                    'timeout' => 30,
+                    'headers' => $headers,
+                ));
+                if (is_wp_error($detail_response)) { return $detail_response; }
+                $detail_status = (int) wp_remote_retrieve_response_code($detail_response);
+                $detail = json_decode(wp_remote_retrieve_body($detail_response), true);
+                if ($detail_status < 200 || $detail_status >= 300 || !is_array($detail) || isset($detail['ex'])) {
+                    $message = isset($detail['ex']['msg']) ? $detail['ex']['msg'] : 'دریافت جزئیات لایسنس موجود از SpotPlayer ناموفق بود.';
+                    return new WP_Error('dietup_spot_lookup_detail', sanitize_text_field($message));
+                }
+
+                $key = self::spotplayer_extract_license_key($detail);
+                if ('' === $key) { $key = self::spotplayer_extract_license_key($license_row); }
+                if ('' === $key) {
+                    return new WP_Error('dietup_spot_lookup_key', 'لایسنس در SpotPlayer وجود دارد اما کلید آن از API دریافت نشد؛ برای جلوگیری از صدور تکراری، صدور جدید متوقف شد.');
+                }
+                return array('found' => true, 'id' => $license_id, 'key' => $key);
+            }
+        }
+
+        return new WP_Error('dietup_spot_lookup_limit', 'بررسی فهرست لایسنس‌ها به سقف صفحات مجاز رسید؛ نتیجه قطعی نیست و صدور جدید انجام نشد.');
+    }
+
+    private static function spotplayer_collect_license_rows($node, &$rows) {
+        if (!is_array($node)) { return; }
+        if (isset($node['_id']) && is_scalar($node['_id'])) {
+            $rows[] = $node;
+            return;
+        }
+        foreach ($node as $value) {
+            if (is_array($value)) { self::spotplayer_collect_license_rows($value, $rows); }
+        }
+    }
+
+    private static function spotplayer_extract_license_key($node) {
+        if (!is_array($node)) { return ''; }
+        if (isset($node['key']) && is_string($node['key']) && '' !== trim($node['key'])) {
+            return sanitize_text_field($node['key']);
+        }
+        foreach ($node as $value) {
+            if (is_array($value)) {
+                $key = self::spotplayer_extract_license_key($value);
+                if ('' !== $key) { return $key; }
+            }
+        }
+        return '';
+    }
+
     public static function spotplayer_license($registration) {
         if (!is_object($registration) || empty($registration->id) || empty($registration->package_key)) {
             return new WP_Error('dietup_spot_registration', 'اطلاعات ثبت‌نام برای صدور لایسنس کامل نیست.');
