@@ -464,7 +464,7 @@ final class DietUp_Plugin {
                 'payment_gateway' => 'test',
                 'payment_ref_id' => 'TEST-' . $registration_id,
                 'paid_at' => current_time('mysql'),
-                'license_status' => 'pending',
+                'license_status' => DietUp_Integrations::spotplayer_package_enabled($package_key) ? 'pending' : 'not_issued',
                 'updated_at' => current_time('mysql'),
             ), array('id' => $registration_id));
 
@@ -766,7 +766,9 @@ final class DietUp_Plugin {
         if ($package && isset($this->packages()[$package])) { $where[] = 'package_key = %s'; $args[] = $package; }
         if ('not_issued' === $license_filter) {
             $integration_settings = get_option('dietup_integration_settings', array());
-            $license_packages = isset($integration_settings['spotplayer_issue_packages']) && is_array($integration_settings['spotplayer_issue_packages']) ? array_values(array_intersect(array('online', 'certificate', 'complete'), $integration_settings['spotplayer_issue_packages'])) : array();
+            $configured_license_packages = isset($integration_settings['spotplayer_issue_packages']) && is_array($integration_settings['spotplayer_issue_packages']) ? $integration_settings['spotplayer_issue_packages'] : array();
+            $first_license_package = $configured_license_packages ? (string) reset($configured_license_packages) : '';
+            $license_packages = in_array($first_license_package, array('online', 'certificate', 'complete'), true) ? array($first_license_package) : array();
             if ($license_packages) {
                 $where[] = "payment_status = 'paid'";
                 $where[] = 'package_key IN (' . implode(',', array_fill(0, count($license_packages), '%s')) . ')';
@@ -941,7 +943,7 @@ final class DietUp_Plugin {
         }
         global $wpdb;
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d", $id));
-        if (!$row || 'paid' !== $row->payment_status || 'failed' !== $row->license_status) {
+        if (!$row || 'paid' !== $row->payment_status || !DietUp_Integrations::spotplayer_package_enabled($row->package_key) || 'failed' !== $row->license_status) {
             wp_die('این ثبت‌نام واجد شرایط تلاش مجدد امن نیست. وضعیت‌های نامشخص باید ابتدا در پنل SpotPlayer بررسی شوند.');
         }
         $claimed = $wpdb->query($wpdb->prepare(
