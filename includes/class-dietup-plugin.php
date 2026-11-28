@@ -310,7 +310,14 @@ final class DietUp_Plugin {
                 <label data-dietup-other hidden>توضیحات محل فعالیت<input name="workplace_other" type="text" maxlength="190"></label>
             </fieldset>
             <fieldset><legend>انتخاب پکیج</legend><div class="dietup-packages">
-            <?php foreach ($this->packages() as $key => $package) : ?>
+            <?php
+            // Presentation-only order: keep package keys and all package logic unchanged.
+            $form_packages = $this->packages();
+            $form_package_order = array('complete', 'certificate', 'online');
+            foreach ($form_package_order as $key) :
+                if (!isset($form_packages[$key])) { continue; }
+                $package = $form_packages[$key];
+            ?>
                 <label class="dietup-package">
                     <input type="radio" name="package_key" value="<?php echo esc_attr($key); ?>" data-certificate="<?php echo in_array($key, array('certificate','complete'), true) ? '1' : '0'; ?>" data-price="<?php echo esc_attr((int)$package['price']); ?>" required>
                     <strong><?php echo esc_html($package['title']); ?></strong>
